@@ -1,4 +1,4 @@
-OpenParty Setup Log - 09-07-2026  8:45:58.00 
+OpenParty Setup Log - 09-07-2026 17:08:11.18 
 Administrator privileges confirmed. 
 Checking for winget... 
 Winget found. Checking dependencies... 
@@ -18,9 +18,8 @@ Requirement already satisfied: pywin32-ctypes>=0.2.1 in C:\Users\Admin\AppData\L
 Requirement already satisfied: setuptools>=42.0.0 in C:\Users\Admin\AppData\Local\Programs\Python\Python314\Lib\site-packages (from pyinstaller>=6.0.0->-r C:\Users\Admin\Desktop\project_p\OpenParty\setup\..\app\requirements.txt (line 3)) (83.0.0)
 VLC is already installed. 
 aria2c found on PATH. 
-Downloading Syncplay installer... 
-Syncplay installed successfully. 
+Syncplay found in Program Files x86. 
 Registering .oparty file association... 
 .oparty=OpenParty.File 
 OpenParty.File="python" "C:\Users\Admin\Desktop\project_p\OpenParty\setup\..\app\main.py" "%1" 
-Setup complete. You can now open OpenParty. 
+Setup complete. You can now open C:\Windows\System32/../dist/OpenParty.exe. 
