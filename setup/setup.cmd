@@ -91,46 +91,80 @@ if %errorLevel% equ 0 (
     )
 )
 
+:: Create portable tools directory
+set TOOLS_DIR=%~dp0tools
+if not exist "%TOOLS_DIR%" mkdir "%TOOLS_DIR%"
+
 :: Check and Install aria2
 echo Checking aria2...
-winget list --id aria2.aria2 >nul 2>&1
+where aria2c >nul 2>&1
 if %errorLevel% equ 0 (
-    echo aria2 is already installed.
-    echo aria2 is already installed. >> %LOGFILE%
+    echo aria2c found on PATH.
+    echo aria2c found on PATH. >> %LOGFILE%
+) else if exist "%TOOLS_DIR%\aria2\aria2c.exe" (
+    echo aria2c found in portable tools.
+    echo aria2c found in portable tools. >> %LOGFILE%
 ) else (
-    echo Installing aria2...
-    echo Installing aria2... >> %LOGFILE%
+    echo aria2c not found. Attempting winget install...
+    echo Installing aria2 via winget... >> %LOGFILE%
     winget install --id aria2.aria2 --version 1.37.0 -e --accept-package-agreements --accept-source-agreements >> %LOGFILE% 2>&1
+    where aria2c >nul 2>&1
     if !errorLevel! neq 0 (
-        echo [ERROR] Failed to install aria2. See install.log for details.
+        echo Winget failed or aria2c not on PATH. Downloading portable version...
+        echo Downloading portable aria2c... >> %LOGFILE%
+        if not exist "%TOOLS_DIR%\aria2" mkdir "%TOOLS_DIR%\aria2"
+        powershell -Command "Invoke-WebRequest -Uri 'https://github.com/aria2/aria2/releases/download/release-1.37.0/aria2-1.37.0-win-64bit-build1.zip' -OutFile '%TEMP%\aria2.zip'" >> %LOGFILE% 2>&1
+        powershell -Command "Expand-Archive -Path '%TEMP%\aria2.zip' -DestinationPath '%TEMP%\aria2_extract' -Force" >> %LOGFILE% 2>&1
+        powershell -Command "Copy-Item '%TEMP%\aria2_extract\aria2-1.37.0-win-64bit-build1\aria2c.exe' '%TOOLS_DIR%\aria2\aria2c.exe' -Force" >> %LOGFILE% 2>&1
+        if exist "%TOOLS_DIR%\aria2\aria2c.exe" (
+            echo aria2c portable installed successfully.
+            echo aria2c portable installed successfully. >> %LOGFILE%
+        ) else (
+            echo [ERROR] Failed to install aria2c. See install.log.
+            echo [ERROR] Failed to install aria2c. >> %LOGFILE%
+        )
     ) else (
-        echo aria2 installed successfully.
+        echo aria2c installed successfully via winget.
     )
 )
 
 :: Check and Install Syncplay
 echo Checking Syncplay...
-winget list --id Syncplay.Syncplay >nul 2>&1
+where Syncplay >nul 2>&1
 if %errorLevel% equ 0 (
-    echo Syncplay is already installed.
-    echo Syncplay is already installed. >> %LOGFILE%
+    echo Syncplay found on PATH.
+    echo Syncplay found on PATH. >> %LOGFILE%
+) else if exist "C:\Program Files\Syncplay\Syncplay.exe" (
+    echo Syncplay found in Program Files.
+    echo Syncplay found in Program Files. >> %LOGFILE%
+) else if exist "C:\Program Files (x86)\Syncplay\Syncplay.exe" (
+    echo Syncplay found in Program Files x86.
+    echo Syncplay found in Program Files x86. >> %LOGFILE%
+) else if exist "%TOOLS_DIR%\syncplay\Syncplay.exe" (
+    echo Syncplay found in portable tools.
+    echo Syncplay found in portable tools. >> %LOGFILE%
 ) else (
-    echo Installing Syncplay (via winget fallback to direct installer)...
-    echo Installing Syncplay... >> %LOGFILE%
+    echo Syncplay not found. Attempting winget install...
+    echo Installing Syncplay via winget... >> %LOGFILE%
     winget install --id Syncplay.Syncplay --version 1.7.5 -e --accept-package-agreements --accept-source-agreements >> %LOGFILE% 2>&1
-    if !errorLevel! neq 0 (
-        echo Winget failed. Trying direct installer fallback...
-        echo Winget failed for Syncplay. Trying direct installer... >> %LOGFILE%
-        powershell -Command "Invoke-WebRequest -Uri 'https://github.com/Syncplay/syncplay/releases/download/v1.7.5/Syncplay-1.7.5-Setup.exe' -OutFile '%TEMP%\SyncplaySetup.exe'" >> %LOGFILE% 2>&1
-        "%TEMP%\SyncplaySetup.exe" /S >> %LOGFILE% 2>&1
-        if !errorLevel! neq 0 (
-            echo [ERROR] Failed to install Syncplay. See install.log for details.
-        ) else (
-            echo Syncplay installed successfully via direct installer.
-            echo Syncplay installed successfully via direct installer. >> %LOGFILE%
-        )
+    :: Verify it actually installed
+    if exist "C:\Program Files\Syncplay\Syncplay.exe" (
+        echo Syncplay installed successfully via winget.
+    ) else if exist "C:\Program Files (x86)\Syncplay\Syncplay.exe" (
+        echo Syncplay installed successfully via winget.
     ) else (
-        echo Syncplay installed successfully.
+        echo Winget failed. Downloading portable Syncplay...
+        echo Downloading portable Syncplay... >> %LOGFILE%
+        if not exist "%TOOLS_DIR%\syncplay" mkdir "%TOOLS_DIR%\syncplay"
+        powershell -Command "Invoke-WebRequest -Uri 'https://github.com/Syncplay/syncplay/releases/download/v1.7.5/Syncplay-1.7.5-Portable.zip' -OutFile '%TEMP%\syncplay.zip'" >> %LOGFILE% 2>&1
+        powershell -Command "Expand-Archive -Path '%TEMP%\syncplay.zip' -DestinationPath '%TOOLS_DIR%\syncplay' -Force" >> %LOGFILE% 2>&1
+        if exist "%TOOLS_DIR%\syncplay\Syncplay.exe" (
+            echo Syncplay portable installed successfully.
+            echo Syncplay portable installed successfully. >> %LOGFILE%
+        ) else (
+            echo [ERROR] Failed to install Syncplay. See install.log.
+            echo [ERROR] Failed to install Syncplay. >> %LOGFILE%
+        )
     )
 )
 
@@ -150,3 +184,4 @@ echo.
 echo Setup complete. You can now open OpenParty.
 echo Setup complete. You can now open OpenParty. >> %LOGFILE%
 pause
+

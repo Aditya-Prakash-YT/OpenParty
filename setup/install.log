@@ -1,49 +1,20 @@
-OpenParty Setup Log - 09-07-2026  8:24:08.26 
+OpenParty Setup Log - 09-07-2026  8:31:26.28 
 Administrator privileges confirmed. 
 Checking for winget... 
 Winget found. Checking dependencies... 
 Checking for Python... 
 Python is installed. 
 Checking and installing Python dependencies... 
-Collecting PySide6>=6.5.0 (from -r C:\Users\Admin\Desktop\project_p\OpenParty\setup\..\app\requirements.txt (line 1))
-  Downloading pyside6-6.11.1-cp310-abi3-win_amd64.whl.metadata (5.5 kB)
-Collecting pyinstaller>=6.0.0 (from -r C:\Users\Admin\Desktop\project_p\OpenParty\setup\..\app\requirements.txt (line 3))
-  Using cached pyinstaller-6.21.0-py3-none-win_amd64.whl.metadata (8.5 kB)
-Collecting shiboken6==6.11.1 (from PySide6>=6.5.0->-r C:\Users\Admin\Desktop\project_p\OpenParty\setup\..\app\requirements.txt (line 1))
-  Downloading shiboken6-6.11.1-cp310-abi3-win_amd64.whl.metadata (2.5 kB)
-Collecting PySide6_Essentials==6.11.1 (from PySide6>=6.5.0->-r C:\Users\Admin\Desktop\project_p\OpenParty\setup\..\app\requirements.txt (line 1))
-  Downloading pyside6_essentials-6.11.1-cp310-abi3-win_amd64.whl.metadata (3.8 kB)
-Collecting PySide6_Addons==6.11.1 (from PySide6>=6.5.0->-r C:\Users\Admin\Desktop\project_p\OpenParty\setup\..\app\requirements.txt (line 1))
-  Downloading pyside6_addons-6.11.1-cp310-abi3-win_amd64.whl.metadata (4.2 kB)
-Collecting altgraph (from pyinstaller>=6.0.0->-r C:\Users\Admin\Desktop\project_p\OpenParty\setup\..\app\requirements.txt (line 3))
-  Using cached altgraph-0.17.5-py2.py3-none-any.whl.metadata (7.5 kB)
-Collecting packaging>=22.0 (from pyinstaller>=6.0.0->-r C:\Users\Admin\Desktop\project_p\OpenParty\setup\..\app\requirements.txt (line 3))
-  Using cached packaging-26.2-py3-none-any.whl.metadata (3.5 kB)
-Collecting pefile>=2022.5.30 (from pyinstaller>=6.0.0->-r C:\Users\Admin\Desktop\project_p\OpenParty\setup\..\app\requirements.txt (line 3))
-  Using cached pefile-2024.8.26-py3-none-any.whl.metadata (1.4 kB)
-Collecting pyinstaller-hooks-contrib>=2026.6 (from pyinstaller>=6.0.0->-r C:\Users\Admin\Desktop\project_p\OpenParty\setup\..\app\requirements.txt (line 3))
-  Using cached pyinstaller_hooks_contrib-2026.6-py3-none-any.whl.metadata (16 kB)
-Collecting pywin32-ctypes>=0.2.1 (from pyinstaller>=6.0.0->-r C:\Users\Admin\Desktop\project_p\OpenParty\setup\..\app\requirements.txt (line 3))
-  Using cached pywin32_ctypes-0.2.3-py3-none-any.whl.metadata (3.9 kB)
-Collecting setuptools>=42.0.0 (from pyinstaller>=6.0.0->-r C:\Users\Admin\Desktop\project_p\OpenParty\setup\..\app\requirements.txt (line 3))
-  Using cached setuptools-83.0.0-py3-none-any.whl.metadata (6.6 kB)
-Downloading pyside6-6.11.1-cp310-abi3-win_amd64.whl (578 kB)
-   ---------------------------------------- 578.4/578.4 kB 9.9 MB/s  0:00:00
-Downloading pyside6_addons-6.11.1-cp310-abi3-win_amd64.whl (168.8 MB)
-   ---------------------------------------- 168.8/168.8 MB 3.2 MB/s  0:00:49
-Downloading pyside6_essentials-6.11.1-cp310-abi3-win_amd64.whl (77.5 MB)
-   ---------------------------------------- 77.5/77.5 MB 3.9 MB/s  0:00:19
-Downloading shiboken6-6.11.1-cp310-abi3-win_amd64.whl (1.2 MB)
-   ---------------------------------------- 1.2/1.2 MB 5.0 MB/s  0:00:00
-Using cached pyinstaller-6.21.0-py3-none-win_amd64.whl (1.4 MB)
-Using cached packaging-26.2-py3-none-any.whl (100 kB)
-Using cached pefile-2024.8.26-py3-none-any.whl (74 kB)
-Using cached pyinstaller_hooks_contrib-2026.6-py3-none-any.whl (457 kB)
-Using cached pywin32_ctypes-0.2.3-py3-none-any.whl (30 kB)
-Using cached setuptools-83.0.0-py3-none-any.whl (1.0 MB)
-Using cached altgraph-0.17.5-py2.py3-none-any.whl (21 kB)
-Installing collected packages: altgraph, shiboken6, setuptools, pywin32-ctypes, pefile, packaging, PySide6_Essentials, pyinstaller-hooks-contrib, PySide6_Addons, pyinstaller, PySide6
-
-Successfully installed PySide6-6.11.1 PySide6_Addons-6.11.1 PySide6_Essentials-6.11.1 altgraph-0.17.5 packaging-26.2 pefile-2024.8.26 pyinstaller-6.21.0 pyinstaller-hooks-contrib-2026.6 pywin32-ctypes-0.2.3 setuptools-83.0.0 shiboken6-6.11.1
+Requirement already satisfied: PySide6>=6.5.0 in C:\Users\Admin\AppData\Local\Programs\Python\Python314\Lib\site-packages (from -r C:\Users\Admin\Desktop\project_p\OpenParty\setup\..\app\requirements.txt (line 1)) (6.11.1)
+Requirement already satisfied: pyinstaller>=6.0.0 in C:\Users\Admin\AppData\Local\Programs\Python\Python314\Lib\site-packages (from -r C:\Users\Admin\Desktop\project_p\OpenParty\setup\..\app\requirements.txt (line 3)) (6.21.0)
+Requirement already satisfied: shiboken6==6.11.1 in C:\Users\Admin\AppData\Local\Programs\Python\Python314\Lib\site-packages (from PySide6>=6.5.0->-r C:\Users\Admin\Desktop\project_p\OpenParty\setup\..\app\requirements.txt (line 1)) (6.11.1)
+Requirement already satisfied: PySide6_Essentials==6.11.1 in C:\Users\Admin\AppData\Local\Programs\Python\Python314\Lib\site-packages (from PySide6>=6.5.0->-r C:\Users\Admin\Desktop\project_p\OpenParty\setup\..\app\requirements.txt (line 1)) (6.11.1)
+Requirement already satisfied: PySide6_Addons==6.11.1 in C:\Users\Admin\AppData\Local\Programs\Python\Python314\Lib\site-packages (from PySide6>=6.5.0->-r C:\Users\Admin\Desktop\project_p\OpenParty\setup\..\app\requirements.txt (line 1)) (6.11.1)
+Requirement already satisfied: altgraph in C:\Users\Admin\AppData\Local\Programs\Python\Python314\Lib\site-packages (from pyinstaller>=6.0.0->-r C:\Users\Admin\Desktop\project_p\OpenParty\setup\..\app\requirements.txt (line 3)) (0.17.5)
+Requirement already satisfied: packaging>=22.0 in C:\Users\Admin\AppData\Local\Programs\Python\Python314\Lib\site-packages (from pyinstaller>=6.0.0->-r C:\Users\Admin\Desktop\project_p\OpenParty\setup\..\app\requirements.txt (line 3)) (26.2)
+Requirement already satisfied: pefile>=2022.5.30 in C:\Users\Admin\AppData\Local\Programs\Python\Python314\Lib\site-packages (from pyinstaller>=6.0.0->-r C:\Users\Admin\Desktop\project_p\OpenParty\setup\..\app\requirements.txt (line 3)) (2024.8.26)
+Requirement already satisfied: pyinstaller-hooks-contrib>=2026.6 in C:\Users\Admin\AppData\Local\Programs\Python\Python314\Lib\site-packages (from pyinstaller>=6.0.0->-r C:\Users\Admin\Desktop\project_p\OpenParty\setup\..\app\requirements.txt (line 3)) (2026.6)
+Requirement already satisfied: pywin32-ctypes>=0.2.1 in C:\Users\Admin\AppData\Local\Programs\Python\Python314\Lib\site-packages (from pyinstaller>=6.0.0->-r C:\Users\Admin\Desktop\project_p\OpenParty\setup\..\app\requirements.txt (line 3)) (0.2.3)
+Requirement already satisfied: setuptools>=42.0.0 in C:\Users\Admin\AppData\Local\Programs\Python\Python314\Lib\site-packages (from pyinstaller>=6.0.0->-r C:\Users\Admin\Desktop\project_p\OpenParty\setup\..\app\requirements.txt (line 3)) (83.0.0)
 VLC is already installed. 
 aria2 is already installed. 
