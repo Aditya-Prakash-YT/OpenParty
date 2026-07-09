@@ -179,7 +179,7 @@ if %errorLevel% neq 0 (
 )
 
 echo.
-echo Setup complete. You can now open OpenParty.
-echo Setup complete. You can now open OpenParty. >> %LOGFILE%
+echo Setup complete. You can now open %cd%/../dist/OpenParty.exe.
+echo Setup complete. You can now open %cd%/../dist/OpenParty.exe. >> %LOGFILE%
 pause
 

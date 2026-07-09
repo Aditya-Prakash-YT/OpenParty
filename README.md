@@ -215,7 +215,6 @@ OpenParty manages torrent downloads automatically.
 Supported sources include:
 
 * Magnet links
-* Torrent files
 
 During downloads users can monitor:
 

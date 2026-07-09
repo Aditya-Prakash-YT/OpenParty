@@ -4,7 +4,7 @@ OpenParty is a decentralized watch party orchestrator built in Python (PySide6).
 
 ## Architecture Overview
 
-- **`setup/setup.cmd`**: Handles UAC elevation, winget installations (VLC, Syncplay, aria2c), and registers the `.oparty` file extension in the Windows Registry.
+- **`setup/setup.cmd`**: Handles UAC elevation, checks for Python 3.12+ (downloads installer if missing), installs pip dependencies (`requirements.txt`), installs VLC/aria2c (with portable fallbacks), downloads and runs the Syncplay installer, and registers the `.oparty` file association.
 - **`app/main.py`**: The entrypoint for the PySide6 UI. Uses a `QStackedWidget` to manage screens.
 - **`app/config/`**: JSON parsing and validation layer (`loader.py`). Strongly typed using Python Dataclasses to represent `.oparty` files.
 - **`app/downloader/`**: An asynchronous JSON-RPC client (`aria2.py`) bridging Python to a detached `aria2c` process. It dynamically binds to open ports and generates random secret tokens.
@@ -22,7 +22,7 @@ OpenParty is packaged using PyInstaller.
 **Build Command:**
 Run the following from the repository root:
 ```cmd
-pyinstaller --noconsole --onefile --name OpenParty --clean app/main.py
+pyinstaller --clean OpenParty.spec
 ```
 
 The resulting standalone executable will be located at `dist/OpenParty.exe`.
