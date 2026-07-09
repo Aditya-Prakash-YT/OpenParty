@@ -1,4 +1,4 @@
-OpenParty Setup Log - 09-07-2026  8:31:26.28 
+OpenParty Setup Log - 09-07-2026  8:39:21.64 
 Administrator privileges confirmed. 
 Checking for winget... 
 Winget found. Checking dependencies... 
@@ -17,4 +17,12 @@ Requirement already satisfied: pyinstaller-hooks-contrib>=2026.6 in C:\Users\Adm
 Requirement already satisfied: pywin32-ctypes>=0.2.1 in C:\Users\Admin\AppData\Local\Programs\Python\Python314\Lib\site-packages (from pyinstaller>=6.0.0->-r C:\Users\Admin\Desktop\project_p\OpenParty\setup\..\app\requirements.txt (line 3)) (0.2.3)
 Requirement already satisfied: setuptools>=42.0.0 in C:\Users\Admin\AppData\Local\Programs\Python\Python314\Lib\site-packages (from pyinstaller>=6.0.0->-r C:\Users\Admin\Desktop\project_p\OpenParty\setup\..\app\requirements.txt (line 3)) (83.0.0)
 VLC is already installed. 
-aria2 is already installed. 
+aria2c found on PATH. 
+Installing Syncplay via winget... 
+Found Syncplay [Syncplay.Syncplay] Version 1.7.5
+This application is licensed to you by its owner.
+Microsoft is not responsible for, nor does it grant any licenses to, third-party packages.
+This package requires the following dependencies:
+  - Packages
+      Microsoft.VCRedist.2015+.x86
+Successfully verified installer hash
