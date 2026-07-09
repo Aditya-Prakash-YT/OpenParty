@@ -14,17 +14,13 @@ Types of import:
 IMPORTANT: Do NOT post this list to the issue-tracker. Use it as a basis for
             tracking down the missing module yourself. Thanks!
 
-missing module named grp - imported by shutil (delayed, optional), tarfile (optional), pathlib (delayed, optional), subprocess (delayed, conditional, optional)
 missing module named pwd - imported by posixpath (delayed, conditional, optional), shutil (delayed, optional), tarfile (optional), pathlib (delayed, optional), subprocess (delayed, conditional, optional), netrc (delayed, conditional), getpass (delayed)
+missing module named grp - imported by shutil (delayed, optional), tarfile (optional), pathlib (delayed, optional), subprocess (delayed, conditional, optional)
+missing module named posix - imported by os (conditional, optional), shutil (conditional), importlib._bootstrap_external (conditional), posixpath (optional)
+missing module named resource - imported by posix (top-level)
 missing module named _frozen_importlib_external - imported by importlib._bootstrap (delayed), importlib (optional), importlib.abc (optional)
 excluded module named _frozen_importlib - imported by importlib (optional), importlib.abc (optional)
-missing module named posix - imported by os (conditional, optional), posixpath (optional), shutil (conditional), importlib._bootstrap_external (conditional)
-missing module named resource - imported by posix (top-level)
-missing module named _posixsubprocess - imported by subprocess (conditional)
-missing module named fcntl - imported by subprocess (optional)
-missing module named 'PySide6.QtWidgets' - imported by gui.create_party (top-level), gui.join_party (top-level), gui.download (top-level), gui.error_panel (top-level), gui.launch (top-level), C:\Users\Admin\Desktop\project_p\OpenParty\app\main.py (delayed, optional)
 missing module named _scproxy - imported by urllib.request (conditional)
 missing module named termios - imported by getpass (optional)
-missing module named 'PySide6.QtGui' - imported by gui.create_party (top-level)
-missing module named 'PySide6.QtCore' - imported by C:\Users\Admin\Desktop\project_p\OpenParty\app\main.py (top-level), gui.create_party (top-level), gui.join_party (top-level), gui.download (top-level), gui.error_panel (top-level), gui.launch (top-level)
-missing module named PySide6 - imported by C:\Users\Admin\Desktop\project_p\OpenParty\app\main.py (top-level)
+missing module named _posixsubprocess - imported by subprocess (conditional)
+missing module named fcntl - imported by subprocess (optional)
