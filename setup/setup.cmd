@@ -144,27 +144,25 @@ if %errorLevel% equ 0 (
     echo Syncplay found in portable tools.
     echo Syncplay found in portable tools. >> %LOGFILE%
 ) else (
-    echo Syncplay not found. Attempting winget install...
-    echo Installing Syncplay via winget... >> %LOGFILE%
-    winget install --id Syncplay.Syncplay --version 1.7.5 -e --accept-package-agreements --accept-source-agreements >> %LOGFILE% 2>&1
+    echo Syncplay not found. Downloading installer...
+    echo Downloading Syncplay installer... >> %LOGFILE%
+    powershell -Command "Invoke-WebRequest -Uri 'https://github.com/Syncplay/syncplay/releases/download/v1.7.5/Syncplay-1.7.5-Setup.exe' -OutFile '%TEMP%\Syncplay-Setup.exe'" >> %LOGFILE% 2>&1
+    echo --------------------------------------------------
+    echo Please follow the Syncplay installation prompt.
+    echo --------------------------------------------------
+    "%TEMP%\Syncplay-Setup.exe"
+    echo After Syncplay is installed, press any key to continue...
+    pause
     :: Verify it actually installed
     if exist "C:\Program Files\Syncplay\Syncplay.exe" (
-        echo Syncplay installed successfully via winget.
+        echo Syncplay installed successfully.
+        echo Syncplay installed successfully. >> %LOGFILE%
     ) else if exist "C:\Program Files (x86)\Syncplay\Syncplay.exe" (
-        echo Syncplay installed successfully via winget.
+        echo Syncplay installed successfully.
+        echo Syncplay installed successfully. >> %LOGFILE%
     ) else (
-        echo Winget failed. Downloading portable Syncplay...
-        echo Downloading portable Syncplay... >> %LOGFILE%
-        if not exist "%TOOLS_DIR%\syncplay" mkdir "%TOOLS_DIR%\syncplay"
-        powershell -Command "Invoke-WebRequest -Uri 'https://github.com/Syncplay/syncplay/releases/download/v1.7.5/Syncplay-1.7.5-Portable.zip' -OutFile '%TEMP%\syncplay.zip'" >> %LOGFILE% 2>&1
-        powershell -Command "Expand-Archive -Path '%TEMP%\syncplay.zip' -DestinationPath '%TOOLS_DIR%\syncplay' -Force" >> %LOGFILE% 2>&1
-        if exist "%TOOLS_DIR%\syncplay\Syncplay.exe" (
-            echo Syncplay portable installed successfully.
-            echo Syncplay portable installed successfully. >> %LOGFILE%
-        ) else (
-            echo [ERROR] Failed to install Syncplay. See install.log.
-            echo [ERROR] Failed to install Syncplay. >> %LOGFILE%
-        )
+        echo [WARNING] Syncplay does not appear to be installed in the default directory.
+        echo [WARNING] Syncplay does not appear to be installed in the default directory. >> %LOGFILE%
     )
 )
 
