@@ -140,6 +140,7 @@ def global_exception_handler(exc_type, exc_value, exc_tb):
     launcher_logger.critical("".join(traceback.format_exception(exc_type, exc_value, exc_tb)))
     # Try to show a dialog if we can
     try:
+        # pyrefly: ignore [missing-import]
         from PySide6.QtWidgets import QMessageBox
         QMessageBox.critical(None, "OpenParty — Unexpected Error", msg)
     except Exception:
