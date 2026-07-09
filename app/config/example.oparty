@@ -1,0 +1,50 @@
+{
+    "schema_version": 1,
+
+    "party": {
+        "name": "Friday Movie Night",
+        "description": "Marvel Marathon",
+        "created_at": "2026-07-09T18:00:00Z",
+        "created_by": "Aditya"
+    },
+
+    "media": {
+        "source": {
+            "type": "magnet",
+            "value": "magnet:?xt=urn:btih:08ada5a7a6183aae1e09d831df6748d566095a10&dn=Sintel&tr=udp%3A%2F%2Ftracker.leechers-paradise.org%3A6969&tr=udp%3A%2F%2Ftracker.coppersurfer.tk%3A6969"
+        },
+
+        "file": {
+            "name_hint": "Sintel.2010.1080p.mkv",
+            "size": null
+        },
+
+        "subtitles": [
+            {
+                "language": "English",
+                "url": "https://example.com/subtitles.srt"
+            }
+        ]
+    },
+
+    "sync": {
+        "server": "syncplay.pl",
+        "port": 8997,
+        "room": "friday-movie-night",
+        "password": ""
+    },
+
+    "playback": {
+        "start_paused": true
+    },
+
+    "integrity": {
+        "sha256": null
+    },
+
+    "compatibility": {
+        "min_openparty_version": "1.0.0"
+    },
+
+    "extensions": {}
+}
