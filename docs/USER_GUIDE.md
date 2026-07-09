@@ -8,7 +8,7 @@ OpenParty relies on standard tools like VLC and Syncplay. To ensure you have exa
 1. Download the OpenParty folder.
 2. Inside, open the `setup` folder.
 3. Right-click `setup.cmd` and select **Run as Administrator**.
-4. The script will securely install VLC, Syncplay, and aria2 (the download engine) using Windows Package Manager (`winget`). It will also register `.oparty` files so you can double-click them to join.
+4. The script will securely install Python (if missing), VLC, Syncplay, and aria2 using Windows Package Manager (`winget`). It will also install required pip packages and register `.oparty` files so you can double-click them to join.
 
 ## 2. Hosting a Watch Party
 

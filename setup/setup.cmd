@@ -33,6 +33,47 @@ if %errorLevel% neq 0 (
 echo Winget found. Checking dependencies...
 echo Winget found. Checking dependencies... >> %LOGFILE%
 
+:: Check for Python
+echo Checking for Python...
+echo Checking for Python... >> %LOGFILE%
+python --version >nul 2>&1
+if %errorLevel% neq 0 (
+    echo [WARNING] Python is not installed or not in PATH.
+    echo [WARNING] Python is not installed. Downloading installer... >> %LOGFILE%
+    echo Downloading Python installer...
+    powershell -Command "Invoke-WebRequest -Uri 'https://www.python.org/ftp/python/3.12.4/python-3.12.4-amd64.exe' -OutFile '%TEMP%\python-installer.exe'" >> %LOGFILE% 2>&1
+    echo --------------------------------------------------
+    echo Please follow the Python installation prompt.
+    echo IMPORTANT: Make sure to check the box "Add Python.exe to PATH" at the bottom of the installer!
+    echo --------------------------------------------------
+    "%TEMP%\python-installer.exe"
+    echo After Python is installed, press any key to continue...
+    pause
+) else (
+    echo Python is installed.
+    echo Python is installed. >> %LOGFILE%
+)
+
+:: Install Python Requirements
+echo Checking and installing Python dependencies...
+echo Checking and installing Python dependencies... >> %LOGFILE%
+if exist "%~dp0..\app\requirements.txt" (
+    python -m pip install -r "%~dp0..\app\requirements.txt" >> %LOGFILE% 2>&1
+    if !errorLevel! neq 0 (
+        py -m pip install -r "%~dp0..\app\requirements.txt" >> %LOGFILE% 2>&1
+        if !errorLevel! neq 0 (
+            echo [WARNING] Failed to install Python packages. You may need to close and run setup.cmd again if you just installed Python.
+        ) else (
+            echo Python packages installed successfully.
+        )
+    ) else (
+        echo Python packages installed successfully.
+    )
+) else (
+    echo [WARNING] requirements.txt not found.
+    echo [WARNING] requirements.txt not found. >> %LOGFILE%
+)
+
 :: Check and Install VLC
 echo Checking VLC media player...
 winget list --id VideoLAN.VLC >nul 2>&1

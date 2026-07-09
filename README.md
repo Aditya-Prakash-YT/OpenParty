@@ -186,6 +186,7 @@ OpenParty automatically checks whether required software already exists.
 
 This includes:
 
+* Python 3.12+ and required packages
 * VLC
 * Syncplay
 * aria2c

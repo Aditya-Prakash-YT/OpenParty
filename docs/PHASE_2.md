@@ -4,7 +4,8 @@
 ✅ Complete
 
 ## What was built
-- `setup.cmd` script that installs VLC, Syncplay, and aria2c using `winget`.
+- `setup.cmd` script that checks for Python, and installs VLC, Syncplay, and aria2c using `winget`.
+- Added automatic Python 3.12 installer download and pip requirements installation if Python is missing.
 - Added self-elevation check to ensure the script runs with Administrator privileges.
 - Added winget availability check and fallback instructions.
 - Implemented `winget` installation with pinned versions (VLC 3.0.23, aria2 1.37.0, Syncplay 1.7.5).

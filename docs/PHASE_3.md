@@ -38,5 +38,5 @@
 - **Stop at first error**: As specified — one clear message per validation attempt, not a list of all problems.
 
 ## Known issues / carried forward to later phases
-- Only `magnet` and `torrent-file` source types supported. Future types (`http`, `https`, `ftp`, `local-network`) are mentioned in the spec but not validated yet.
+- Only `magnet` source types supported (Schema v2 removed `torrent-file`). Future types (`http`, `https`, `ftp`, `local-network`) are mentioned in the spec but not validated yet.
 - Subtitle download logic is a Phase 7 concern — the schema and validation support multiple subtitles, but actual downloading is not implemented yet.
