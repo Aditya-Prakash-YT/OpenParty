@@ -8,7 +8,7 @@ OpenParty relies on standard tools like VLC and Syncplay. To ensure you have exa
 1. Download the OpenParty folder.
 2. Inside, open the `setup` folder.
 3. Right-click `setup.cmd` and select **Run as Administrator**.
-4. The script will securely install Python (if missing), VLC, Syncplay, and aria2 using Windows Package Manager (`winget`). It will also install required pip packages and register `.oparty` files so you can double-click them to join.
+4. The script will automatically download and install Python (if missing), VLC, Syncplay, aria2c, and qBittorrent using built-in Windows PowerShell — no app store or winget required. It will also install required pip packages and register `.oparty` files so you can double-click them to join.
 
 ## 2. Hosting a Watch Party
 
@@ -20,8 +20,8 @@ As the host, your job is to create the party file and send it to your friends.
    - **Party Name:** What you're watching (e.g., "Friday Movie Night").
    - **Room Name:** A unique name for your Syncplay room (e.g., "daves-movie-room").
    - **Password:** Optional, but recommended to keep strangers out.
-   - **Media Source:** A magnet link for the movie.
-   - **Optional Fields:** You can add a description, file size, or name hint (to help OpenParty select the right file if the magnet contains multiple videos).
+   - **Media Source:** Click **Create Torrent & Seed** and pick your video file. OpenParty will automatically create a torrent, start seeding it in qBittorrent, and fill in the magnet link for you! (Or, you can paste an existing magnet link).
+   - **Optional Fields:** You can add a description, file size, or name hint (if you use the Create Torrent button, size and name hint are filled automatically).
 4. Click **Export Party File**.
 5. Send the resulting `.oparty` file to your friends (e.g., drag and drop it into Discord).
 

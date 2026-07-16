@@ -7,7 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_No unreleased changes._
+### Added
+- **setup.cmd**: Added automated checking and silent installation of `qBittorrent 4.6.5` from SourceForge using native PowerShell.
+- **setup.cmd**: Replaced all `winget` dependency with pure PowerShell (`Invoke-WebRequest` with forced TLS 1.2) for downloading and silently/interactively installing dependencies (Python, VLC, aria2c, Syncplay, qBittorrent).
+- **Host UI**: Seamless qBittorrent integration. A new "Create Torrent & Seed" button automates torrent creation via the qBittorrent Web API (v5+ `torrentCreator` or v4 fallback), starts seeding, and auto-fills the magnet link.
+- **Backend**: Added `torrent_creator.py` (a zero-dependency qBittorrent Web API client) and `gui/torrent_worker.py` (QThread worker for non-blocking torrent creation).
+
 
 ## [1.1.0] - 2026-07-09
 
@@ -31,6 +36,7 @@ _No unreleased changes._
 
 ### Removed
 - **Config Loader**: Removed support for local `.torrent` files (`torrent-file` source type) — Schema v2 only accepts `magnet` links to guarantee `.oparty` files are fully portable.
+- **setup.cmd**: Removed all `winget` dependency — no longer requires Windows App Installer to be present on the guest machine.
 
 ## [1.0.0] - 2026-07-09
 

@@ -248,7 +248,7 @@ Save as `docs/PHASE_N.md` at the end of every phase:
 ### PHASE 5 — Create Party (Host Flow)
 
 **Tasks:**
-- Build the host form: party name, magnet link or `.torrent` file (file picker for local files, text field for magnet links), optional subtitle URL, syncplay server (default to a sensible public one, editable), room name (offer a "generate random name" button), optional room password (offer "generate random password" button).
+- Build the host form: party name, magnet link (with a "Create Torrent & Seed" button that lets the host pick a local video file, then automatically uses a background `QThread` and the qBittorrent Web API to create the torrent, start seeding, and auto-fill the magnet link), optional subtitle URL, syncplay server (default to a sensible public one, editable), room name (offer a "generate random name" button), optional room password (offer "generate random password" button).
 - Validate inputs live as the host types, using the Phase 3 config module.
 - "Export" saves a `.json` file via a save dialog **and** offers "Copy to Clipboard" — this file usually gets shared by pasting straight into a Discord message, not as an attachment.
 - If the password is left blank, show one line of caution: anyone who knows the room name on the same Syncplay server could join.

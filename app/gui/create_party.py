@@ -3,6 +3,7 @@ import random
 import string
 import datetime
 import os
+import subprocess
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
                                QLineEdit, QPushButton, QMessageBox, QFormLayout, 
                                QScrollArea, QFileDialog)
@@ -10,6 +11,8 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QGuiApplication
 
 from config.loader import load_party_string, PartyFileError
+from deps import find_qbittorrent
+from gui.torrent_worker import TorrentWorker
 
 def generate_random_string(length=12):
     return ''.join(random.choices(string.ascii_lowercase + string.digits, k=length))
@@ -19,6 +22,7 @@ class CreatePartyWidget(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self._torrent_worker = None
         self._setup_ui()
         self._connect_signals()
         self._validate_live()
@@ -56,9 +60,43 @@ class CreatePartyWidget(QWidget):
         self.created_by_input.setPlaceholderText("(Optional) Your name")
         self.form_layout.addRow("Host Name:", self.created_by_input)
         
+        # ─── Magnet Link row with Create Torrent button ───
         self.source_value_input = QLineEdit()
-        self.source_value_input.setPlaceholderText("magnet:?xt=...")
-        self.form_layout.addRow("Magnet Link:", self.source_value_input)
+        self.source_value_input.setPlaceholderText("magnet:?xt=...  (or use 'Create Torrent & Seed' below)")
+        
+        magnet_layout = QHBoxLayout()
+        magnet_layout.addWidget(self.source_value_input)
+        
+        self.qbittorrent_path = find_qbittorrent()
+        
+        self.btn_open_qbittorrent = QPushButton("qBittorrent")
+        self.btn_open_qbittorrent.setToolTip("Open qBittorrent")
+        if not self.qbittorrent_path:
+            self.btn_open_qbittorrent.setEnabled(False)
+            self.btn_open_qbittorrent.setToolTip("qBittorrent not found — run setup.cmd to install it")
+        magnet_layout.addWidget(self.btn_open_qbittorrent)
+        self.form_layout.addRow("Magnet Link:", magnet_layout)
+        
+        # ─── Create Torrent & Seed section ───
+        torrent_section = QHBoxLayout()
+        
+        self.btn_create_torrent = QPushButton("📁 Create Torrent && Seed")
+        self.btn_create_torrent.setMinimumHeight(36)
+        self.btn_create_torrent.setToolTip(
+            "Select a video file → OpenParty will create a torrent,\n"
+            "start seeding it via qBittorrent, and fill in the magnet link automatically."
+        )
+        if not self.qbittorrent_path:
+            self.btn_create_torrent.setEnabled(False)
+            self.btn_create_torrent.setToolTip("qBittorrent not found — run setup.cmd to install it")
+        
+        self.lbl_torrent_status = QLabel("")
+        self.lbl_torrent_status.setStyleSheet("font-size: 12px; color: #6b7280;")
+        self.lbl_torrent_status.setWordWrap(True)
+        
+        torrent_section.addWidget(self.btn_create_torrent)
+        torrent_section.addWidget(self.lbl_torrent_status, 1)
+        self.form_layout.addRow("", torrent_section)
         
         self.name_hint_input = QLineEdit()
         self.name_hint_input.setPlaceholderText("(Optional) Movie.2026.1080p.mkv")
@@ -131,6 +169,8 @@ class CreatePartyWidget(QWidget):
         self.description_input.textChanged.connect(self._validate_live)
         self.created_by_input.textChanged.connect(self._validate_live)
         self.source_value_input.textChanged.connect(self._validate_live)
+        self.btn_open_qbittorrent.clicked.connect(self._on_open_qbittorrent)
+        self.btn_create_torrent.clicked.connect(self._on_create_torrent)
         self.name_hint_input.textChanged.connect(self._validate_live)
         self.size_input.textChanged.connect(self._validate_live)
         self.hash_input.textChanged.connect(self._validate_live)
@@ -242,3 +282,84 @@ class CreatePartyWidget(QWidget):
         cb = QGuiApplication.clipboard()
         cb.setText(raw_json)
         QMessageBox.information(self, "Copied", "Party data copied to clipboard. You can paste this directly to your friends in chat.")
+
+    def _on_open_qbittorrent(self):
+        """Open qBittorrent directly (simple launcher, no API)."""
+        if not self.qbittorrent_path:
+            return
+        
+        magnet_link = self.source_value_input.text().strip()
+        
+        try:
+            if magnet_link.startswith("magnet:"):
+                subprocess.Popen([self.qbittorrent_path, magnet_link])
+            else:
+                subprocess.Popen([self.qbittorrent_path])
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to launch qBittorrent:\n{e}")
+
+    # ─── Seamless torrent creation via qBittorrent Web API ───
+
+    def _on_create_torrent(self):
+        """Pick a file, create a torrent, seed it, fill in the magnet link."""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Select the file to share",
+            "",
+            "Video Files (*.mkv *.mp4 *.avi *.mov *.wmv *.flv *.webm);;All Files (*)"
+        )
+        if not file_path:
+            return
+
+        # Make sure qBittorrent is running
+        if self.qbittorrent_path:
+            try:
+                subprocess.Popen([self.qbittorrent_path])
+            except Exception:
+                pass
+
+        # Disable button while working
+        self.btn_create_torrent.setEnabled(False)
+        self.btn_create_torrent.setText("Working…")
+        self.lbl_torrent_status.setStyleSheet("font-size: 12px; color: #6b7280;")
+        self.lbl_torrent_status.setText("Starting…")
+
+        self._torrent_worker = TorrentWorker(file_path, parent=self)
+        self._torrent_worker.status_update.connect(self._on_torrent_status)
+        self._torrent_worker.finished_ok.connect(self._on_torrent_ok)
+        self._torrent_worker.finished_err.connect(self._on_torrent_err)
+        self._torrent_worker.start()
+
+    def _on_torrent_status(self, msg: str):
+        self.lbl_torrent_status.setText(msg)
+
+    def _on_torrent_ok(self, magnet: str, file_name: str, file_size: int):
+        """Called when the torrent worker finishes successfully."""
+        # Auto-fill the form
+        self.source_value_input.setText(magnet)
+        self.name_hint_input.setText(file_name)
+        self.size_input.setText(str(file_size))
+
+        self.lbl_torrent_status.setStyleSheet("font-size: 12px; color: #16a34a; font-weight: bold;")
+        self.lbl_torrent_status.setText("✔ Torrent created & seeding!")
+
+        self.btn_create_torrent.setEnabled(True)
+        self.btn_create_torrent.setText("📁 Create Torrent && Seed")
+
+        self._validate_live()
+
+    def _on_torrent_err(self, err_msg: str):
+        """Called when the torrent worker fails."""
+        self.lbl_torrent_status.setStyleSheet("font-size: 12px; color: #dc2626;")
+        self.lbl_torrent_status.setText(f"Error: {err_msg[:80]}")
+
+        self.btn_create_torrent.setEnabled(True)
+        self.btn_create_torrent.setText("📁 Create Torrent && Seed")
+
+        QMessageBox.warning(
+            self, "Torrent Creation Failed",
+            f"{err_msg}\n\n"
+            "Make sure qBittorrent is running with the Web UI enabled:\n"
+            "  Tools → Options → Web UI → ☑ Enable\n"
+            "  Default: localhost:8080, admin / check console for password"
+        )

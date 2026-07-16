@@ -4,13 +4,13 @@
 ✅ Complete
 
 ## What was built
-- `setup.cmd` script that checks for Python 3.12+, installing the official installer if missing, and running pip to install dependencies.
-- Installs VLC via `winget`.
-- Checks for `aria2c` on PATH, then in portable tools, falling back to winget and finally downloading/extracting a portable version to `setup/tools/aria2/`.
-- Checks for `Syncplay` on PATH, Program Files, or portable tools, falling back to downloading and running the `Syncplay-1.7.5-Setup.exe` installer.
-- Added self-elevation check to ensure the script runs with Administrator privileges.
-- Registered `.oparty` file extension to open with `python app/main.py`.
-- Full output logged to `setup/install.log`.
+- `setup.cmd` fully rewritten to remove `winget` dependency — uses PowerShell `Invoke-WebRequest` (built into all modern Windows) for all downloads.
+- Python 3.12.4: downloads and runs official installer if not found; prompts user to tick "Add to PATH".
+- VLC 3.0.23: downloaded directly from VideoLAN CDN and installed silently (`/S`).
+- qBittorrent 4.6.5: downloaded from SourceForge and installed silently (`/S`).
+- aria2c 1.37.0: downloaded as a portable `.zip` and extracted to `setup/tools/aria2/` — no system changes.
+- Syncplay 1.7.5: downloaded from GitHub releases and run interactively by the user.
+- TLS 1.2 explicitly forced in all PowerShell download calls to ensure compatibility on older Windows 10 builds.
 
 ## Files added / changed
 - `setup/setup.cmd`

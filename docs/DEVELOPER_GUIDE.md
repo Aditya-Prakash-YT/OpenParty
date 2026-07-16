@@ -4,11 +4,12 @@ OpenParty is a decentralized watch party orchestrator built in Python (PySide6).
 
 ## Architecture Overview
 
-- **`setup/setup.cmd`**: Handles UAC elevation, checks for Python 3.12+ (downloads installer if missing), installs pip dependencies (`requirements.txt`), installs VLC/aria2c (with portable fallbacks), downloads and runs the Syncplay installer, and registers the `.oparty` file association.
+- **`setup/setup.cmd`**: Handles UAC elevation, checks for Python 3.12+ (downloads installer if missing), installs pip dependencies (`requirements.txt`), installs VLC and qBittorrent silently, extracts portable aria2c to `setup/tools/aria2/`, downloads and runs the Syncplay installer, and registers the `.oparty` file association. All downloads use PowerShell `Invoke-WebRequest` with TLS 1.2 — no `winget` required.
 - **`app/main.py`**: The entrypoint for the PySide6 UI. Uses a `QStackedWidget` to manage screens.
 - **`app/config/`**: JSON parsing and validation layer (`loader.py`). Strongly typed using Python Dataclasses to represent `.oparty` files.
 - **`app/downloader/`**: An asynchronous JSON-RPC client (`aria2.py`) bridging Python to a detached `aria2c` process. It dynamically binds to open ports and generates random secret tokens.
-- **`app/gui/`**: Individual screen logic (Create, Join, Download, Launch) and the `error_panel.py` abstraction.
+- **`app/torrent_creator.py`**: A zero-dependency qBittorrent Web API client that handles authentication and uses the v5 `torrentCreator` API (with a pure-Python Bencode fallback for v4) to automate torrent creation and seeding for the host.
+- **`app/gui/`**: Individual screen logic (Create, Join, Download, Launch), the `error_panel.py` abstraction, and `torrent_worker.py` (a QThread for non-blocking torrent generation).
 - **`app/deps.py`**: Passive dependency detection. Uses the Windows Registry and `shutil.which()` to find installed executables.
 
 ## Building and Packaging

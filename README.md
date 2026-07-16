@@ -190,6 +190,7 @@ This includes:
 * VLC
 * Syncplay
 * aria2c
+* qBittorrent
 
 Installing this software happens once, through a separate one-time setup step—the everyday app never installs anything itself. If something is missing, OpenParty clearly says so and points back to that one-time setup, then continues normally once it's done.
 
@@ -246,9 +247,9 @@ Playback begins synchronized across everyone in the room.
 
 Creating a party is designed to be equally simple.
 
-The host enters:
+The host enters or selects:
 
-* Movie source
+* A local video file (OpenParty automatically creates and seeds the torrent) or a Magnet link
 * Party name
 * Room information
 * Optional password

@@ -16,12 +16,16 @@
 - **Live Validation:** Re-uses Phase 3's `load_party_string` to validate inputs as the user types. The Export/Copy buttons only unlock when the config is valid.
 - **Warning:** Shows an orange warning if no password is set ("Note: Without a password, anyone who knows the room name on this server can join.").
 - **Export / Copy:** Features an "Export to .oparty File" button and a "Copy to Clipboard" button for easy sharing via Discord/text.
-- Integrated into `app/main.py` using `QStackedWidget` so the host can return to the main menu at any time.
+- **Seamless qBittorrent Integration:** 
+  - Hosts can pick a video file and the app will communicate with the qBittorrent Web API (via a background `QThread`). 
+  - It automatically creates the torrent, starts seeding it, and pulls the magnet link back into the form.
 
 ## Files added / changed
 - `app/gui/__init__.py` (new)
-- `app/gui/create_party.py` (new)
+- `app/gui/create_party.py` (new/updated)
 - `app/main.py` (modified)
+- `app/torrent_creator.py` (new)
+- `app/gui/torrent_worker.py` (new)
 
 ## How to test this phase manually
 1. Bypass the Environment check (since VLC/Syncplay are not installed yet) by returning `True` in `deps.py` or mocking it. (Or just install Syncplay).

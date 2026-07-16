@@ -64,6 +64,14 @@ def find_aria2c() -> Optional[str]:
     return _search_paths("aria2c.exe", _get_portable_paths("aria2"))
 
 
+def find_qbittorrent() -> Optional[str]:
+    """Find qBittorrent executable path."""
+    return _search_paths("qbittorrent.exe", [
+        r"C:\Program Files\qBittorrent",
+        r"C:\Program Files (x86)\qBittorrent",
+    ])
+
+
 def check_dependencies() -> Dict[str, bool]:
     """
     Check if required software is available.
