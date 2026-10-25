@@ -1,6 +1,8 @@
 import os
 import sys
 import shutil
+import zipfile
+import subprocess
 from typing import Dict, Optional
 
 # Common search locations beyond PATH
@@ -31,14 +33,45 @@ def _search_paths(name: str, extra_dirs: list[str]) -> Optional[str]:
 
 
 def _get_portable_paths(tool_name: str) -> list[str]:
-    """Get potential portable tool directories whether frozen or not."""
+    """Get potential portable tool directories whether frozen or running from source."""
     if getattr(sys, 'frozen', False):
         exe_dir = os.path.dirname(sys.executable)
         base_dirs = [exe_dir, os.path.join(exe_dir, "..")]
     else:
-        base_dirs = [os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")]
+        app_dir = os.path.dirname(os.path.abspath(__file__))
+        repo_dir = os.path.abspath(os.path.join(app_dir, ".."))
+        base_dirs = [app_dir, repo_dir]
     
-    return [os.path.join(b, "setup", "tools", tool_name) for b in base_dirs]
+    paths = []
+    for b in base_dirs:
+        b_abs = os.path.abspath(b)
+        paths.append(os.path.join(b_abs, "setup", "tools", tool_name))
+        paths.append(os.path.join(b_abs, "tools", tool_name))
+        paths.append(os.path.join(b_abs, f"{tool_name}-portable"))
+        paths.append(os.path.join(b_abs, tool_name))
+        paths.append(b_abs)
+    return paths
+
+
+def ensure_syncplay_unpacked():
+    """Unpack syncplay-portable.zip if Syncplay.exe is not found but zip exists."""
+    for p in _get_portable_paths("syncplay"):
+        if os.path.isfile(os.path.join(p, "Syncplay.exe")):
+            return
+    
+    app_dir = os.path.dirname(os.path.abspath(__file__))
+    repo_dir = os.path.abspath(os.path.join(app_dir, ".."))
+    for base in [repo_dir, app_dir]:
+        zip_candidate = os.path.join(base, "syncplay-portable.zip")
+        if os.path.isfile(zip_candidate):
+            try:
+                dest = os.path.join(base, "syncplay-portable")
+                os.makedirs(dest, exist_ok=True)
+                with zipfile.ZipFile(zip_candidate, 'r') as zf:
+                    zf.extractall(dest)
+                return
+            except Exception:
+                pass
 
 
 def find_vlc() -> Optional[str]:
@@ -46,11 +79,13 @@ def find_vlc() -> Optional[str]:
     return _search_paths("vlc.exe", [
         r"C:\Program Files\VideoLAN\VLC",
         r"C:\Program Files (x86)\VideoLAN\VLC",
-    ])
+        os.path.join(_USER_PROGRAMS, "VideoLAN", "VLC"),
+    ] + _get_portable_paths("vlc"))
 
 
 def find_syncplay() -> Optional[str]:
     """Find Syncplay executable path."""
+    ensure_syncplay_unpacked()
     return _search_paths("Syncplay.exe", [
         r"C:\Program Files\Syncplay",
         r"C:\Program Files (x86)\Syncplay",
@@ -61,7 +96,10 @@ def find_syncplay() -> Optional[str]:
 
 def find_aria2c() -> Optional[str]:
     """Find aria2c executable path."""
-    return _search_paths("aria2c.exe", _get_portable_paths("aria2"))
+    return _search_paths("aria2c.exe", [
+        r"C:\Program Files\aria2",
+        r"C:\Program Files (x86)\aria2",
+    ] + _get_portable_paths("aria2") + _get_portable_paths("aria2c"))
 
 
 def find_qbittorrent() -> Optional[str]:
@@ -69,16 +107,41 @@ def find_qbittorrent() -> Optional[str]:
     return _search_paths("qbittorrent.exe", [
         r"C:\Program Files\qBittorrent",
         r"C:\Program Files (x86)\qBittorrent",
-    ])
+        os.path.join(_USER_PROGRAMS, "qBittorrent"),
+        os.path.join(os.environ.get("LOCALAPPDATA", ""), "qBittorrent"),
+    ] + _get_portable_paths("qbittorrent"))
 
 
 def check_dependencies() -> Dict[str, bool]:
     """
     Check if required software is available.
     Returns a dictionary of dependency statuses.
+    Core dependencies: vlc, syncplay, aria2c (required)
+    Optional: qbittorrent (enhances seeding, not required)
     """
     return {
         "vlc": find_vlc() is not None,
         "syncplay": find_syncplay() is not None,
         "aria2c": find_aria2c() is not None,
     }
+
+
+# Dependencies that are truly required to function
+REQUIRED_DEPS = {"vlc", "syncplay", "aria2c"}
+
+
+
+def run_setup_installer() -> bool:
+    """Launch setup.cmd with administrative privileges."""
+    app_dir = os.path.dirname(os.path.abspath(__file__))
+    setup_cmd = os.path.abspath(os.path.join(app_dir, "..", "setup", "setup.cmd"))
+    if not os.path.isfile(setup_cmd):
+        setup_cmd = os.path.abspath(os.path.join(app_dir, "setup", "setup.cmd"))
+    if not os.path.isfile(setup_cmd):
+        return False
+    try:
+        cmd = f'powershell -Command "Start-Process -FilePath \'{setup_cmd}\' -Verb RunAs"'
+        subprocess.Popen(cmd, shell=True)
+        return True
+    except Exception:
+        return False

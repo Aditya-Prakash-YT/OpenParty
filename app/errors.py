@@ -13,9 +13,7 @@ Technical details go to the log only.
 
 import os
 import traceback
-from logger import launcher_logger
-
-LOG_DIR = os.path.join(os.path.expanduser("~"), "AppData", "Local", "OpenParty")
+from logger import launcher_logger, LOG_DIR
 
 
 def format_error(problem: str, cause: str, fix: str) -> str:
@@ -32,7 +30,9 @@ def log_and_format(problem: str, cause: str, fix: str, exc: Exception = None) ->
     msg = format_error(problem, cause, fix)
     launcher_logger.error(msg)
     if exc:
-        launcher_logger.error(traceback.format_exc())
+        launcher_logger.error(
+            "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
+        )
     return msg
 
 
@@ -86,6 +86,13 @@ def err_torrent_no_peers() -> str:
         "Download stalled — no peers found.",
         "Nobody is seeding this torrent right now, or the magnet link may be invalid.",
         "Ask the host to confirm the magnet link is correct, or try again later."
+    )
+
+def err_torrent_metadata_timeout() -> str:
+    return format_error(
+        "Could not connect to peers or retrieve movie details.",
+        "The host may not be seeding yet, firewall may be blocking connections, or no peers are online.",
+        "Make sure the host has OpenParty running, check your connection, and click Try Again."
     )
 
 def err_network_lost() -> str:

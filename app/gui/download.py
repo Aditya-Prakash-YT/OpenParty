@@ -1,7 +1,7 @@
 import os
 import shutil
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QLabel, QProgressBar, 
-                               QPushButton, QHBoxLayout)
+                               QPushButton, QHBoxLayout, QFrame, QStyle, QFileDialog)
 from PySide6.QtCore import Qt, QTimer, Signal
 
 from config.loader import PartyConfig
@@ -24,33 +24,74 @@ class DownloadWidget(QWidget):
         self.save_dir = os.path.join(os.path.expanduser("~"), "Downloads", "OpenParty")
         self.checked_disk = False
         self._stall_count = 0
+        self._metadata_stall_count = 0
         self._network_retry_count = 0
         
         self._setup_ui()
 
     def _setup_ui(self):
         self.main_layout = QVBoxLayout(self)
+        self.main_layout.setContentsMargins(24, 24, 24, 24)
+        self.main_layout.setSpacing(16)
         
+        # Header
         self.lbl_title = QLabel("Downloading Media")
-        self.lbl_title.setStyleSheet("font-size: 20px; font-weight: bold;")
+        self.lbl_title.setStyleSheet("font-size: 22px; font-weight: bold; color: #111827;")
         self.lbl_title.setAlignment(Qt.AlignCenter)
         self.main_layout.addWidget(self.lbl_title)
         
-        self.lbl_status = QLabel("Starting...")
+        # Download Card Container
+        card = QFrame()
+        card.setStyleSheet(
+            "QFrame { background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 20px; }"
+            "QLabel { background: transparent; border: none; }"
+        )
+        card_layout = QVBoxLayout(card)
+        card_layout.setSpacing(14)
+        
+        self.lbl_movie_name = QLabel("")
+        self.lbl_movie_name.setStyleSheet("font-size: 15px; font-weight: 600; color: #1e293b;")
+        self.lbl_movie_name.setAlignment(Qt.AlignCenter)
+        self.lbl_movie_name.setWordWrap(True)
+        card_layout.addWidget(self.lbl_movie_name)
+        
+        self.lbl_status = QLabel("Connecting to watch party peers...")
         self.lbl_status.setAlignment(Qt.AlignCenter)
-        self.main_layout.addWidget(self.lbl_status)
+        self.lbl_status.setStyleSheet("font-size: 13px; color: #475569;")
+        card_layout.addWidget(self.lbl_status)
         
         self.progress = QProgressBar()
         self.progress.setValue(0)
-        self.main_layout.addWidget(self.progress)
+        self.progress.setMinimumHeight(24)
+        self.progress.setStyleSheet(
+            "QProgressBar { border: 1px solid #cbd5e1; border-radius: 6px; text-align: center; font-weight: bold; color: #1e293b; background-color: #ffffff; }"
+            "QProgressBar::chunk { background-color: #2563eb; border-radius: 5px; }"
+        )
+        card_layout.addWidget(self.progress)
         
         info_layout = QHBoxLayout()
         self.lbl_speed = QLabel("0 KB/s")
+        self.lbl_speed.setStyleSheet("font-weight: 600; color: #2563eb; font-size: 13px;")
+        
         self.lbl_eta = QLabel("ETA: --")
+        self.lbl_eta.setStyleSheet("font-weight: 600; color: #64748b; font-size: 13px;")
+        
         info_layout.addWidget(self.lbl_speed)
         info_layout.addStretch()
         info_layout.addWidget(self.lbl_eta)
-        self.main_layout.addLayout(info_layout)
+        card_layout.addLayout(info_layout)
+        
+        self.btn_select_local = QPushButton("Already have this video on your PC? Select file...")
+        self.btn_select_local.setFlat(True)
+        self.btn_select_local.setCursor(Qt.PointingHandCursor)
+        self.btn_select_local.setStyleSheet(
+            "QPushButton { color: #2563eb; font-size: 12px; font-weight: 500; border: none; background: transparent; padding: 4px; }"
+            "QPushButton:hover { text-decoration: underline; color: #1d4ed8; }"
+        )
+        self.btn_select_local.clicked.connect(self._on_select_local_file)
+        card_layout.addWidget(self.btn_select_local, alignment=Qt.AlignCenter)
+        
+        self.main_layout.addWidget(card)
         
         # Error panel
         self.error_panel = ErrorPanel()
@@ -60,7 +101,15 @@ class DownloadWidget(QWidget):
         
         self.main_layout.addStretch()
         
-        self.btn_cancel = QPushButton("Cancel")
+        self.btn_cancel = QPushButton("Cancel Download")
+        self.btn_cancel.setIcon(self.style().standardIcon(QStyle.SP_DialogCancelButton))
+        self.btn_cancel.setMinimumHeight(36)
+        self.btn_cancel.setFixedWidth(150)
+        self.btn_cancel.setCursor(Qt.PointingHandCursor)
+        self.btn_cancel.setStyleSheet(
+            "QPushButton { background-color: #f1f5f9; color: #1e293b; font-weight: 500; border: 1px solid #cbd5e1; border-radius: 4px; }"
+            "QPushButton:hover { background-color: #e2e8f0; }"
+        )
         self.btn_cancel.clicked.connect(self._on_cancel)
         self.main_layout.addWidget(self.btn_cancel, alignment=Qt.AlignCenter)
 
@@ -68,14 +117,28 @@ class DownloadWidget(QWidget):
         self.config = config
         self.checked_disk = False
         self._stall_count = 0
+        self._metadata_stall_count = 0
         self._network_retry_count = 0
         self.error_panel.clear()
         self.btn_cancel.show()
-        self.lbl_status.setText("Starting aria2c...")
+        
+        name_hint = self.config.media.file.name_hint or self.config.party.name
+        self.lbl_movie_name.setText(name_hint)
+        self.lbl_status.setText("Checking for existing download...")
         self.progress.setValue(0)
         self.lbl_speed.setText("0 KB/s")
         self.lbl_eta.setText("ETA: --")
-        
+
+        # Check if file already exists from a previous download
+        existing = self._find_existing_download()
+        if existing:
+            launcher_logger.info(f"Found already-downloaded file: {existing}")
+            self.lbl_status.setText("Movie file already downloaded! Ready to watch.")
+            self.progress.setValue(100)
+            self.download_complete.emit(existing)
+            return
+
+        self.lbl_status.setText("Starting download engine (aria2c)...")
         try:
             self.manager = Aria2Manager()
             self.manager.start(self.save_dir)
@@ -94,19 +157,36 @@ class DownloadWidget(QWidget):
             )
             self._show_error(msg)
 
+    def _find_existing_download(self):
+        """Check if the media file was already downloaded in a previous session or is currently seeded."""
+        try:
+            from torrent_creator import SeederManager
+            seeded_candidate = SeederManager.get_current_file()
+            if seeded_candidate and os.path.isfile(seeded_candidate):
+                hint = self.config.media.file.name_hint
+                if not hint or os.path.basename(seeded_candidate) == hint:
+                    return seeded_candidate
+        except Exception:
+            pass
+
+        hint = self.config.media.file.name_hint
+        if not hint:
+            return None
+        candidate = os.path.join(self.save_dir, hint)
+        if not os.path.isfile(candidate):
+            return None
+        expected_size = self.config.media.file.size
+        if expected_size is not None and expected_size > 0:
+            actual_size = os.path.getsize(candidate)
+            if actual_size != expected_size:
+                launcher_logger.info(f"Existing file size mismatch: expected {expected_size}, got {actual_size}")
+                return None
+        return candidate
+
     def _add_download(self):
-        source_type = self.config.media.source.type
         val = self.config.media.source.value
-        
-        if source_type == "magnet":
-            self.gid = self.manager.add_uri(val)
-            self.lbl_status.setText("Fetching metadata...")
-        elif source_type == "torrent-file":
-            if os.path.exists(val):
-                self.gid = self.manager.add_torrent(val)
-            else:
-                self.gid = self.manager.add_uri(val)
-            self.lbl_status.setText("Starting download...")
+        self.gid = self.manager.add_uri(val)
+        self.lbl_status.setText("Connecting to peers & retrieving movie details...")
 
     def _poll_progress(self):
         if not self.manager or not self.gid:
@@ -115,11 +195,10 @@ class DownloadWidget(QWidget):
         try:
             status = self.manager.get_status(self.gid)
         except Aria2Error as e:
-            # Network drop or aria2c crash during poll
             self._network_retry_count += 1
             if self._network_retry_count <= 3:
                 launcher_logger.warning(f"RPC poll failed (attempt {self._network_retry_count}): {e}")
-                return  # silent retry on next tick
+                return
             self.timer.stop()
             msg = errors.err_network_lost()
             launcher_logger.error(f"RPC poll failed after retries: {e}")
@@ -129,16 +208,16 @@ class DownloadWidget(QWidget):
             launcher_logger.error(f"Unexpected poll error: {e}")
             return
             
-        self._network_retry_count = 0  # reset on success
+        self._network_retry_count = 0
             
-        # Check for disk space once we know total length
         total_length = int(status.get("totalLength", 0))
         if total_length > 0 and not self.checked_disk:
             try:
-                free_space = shutil.disk_usage(self.save_dir).free
+                check_path = self.save_dir if os.path.exists(self.save_dir) else os.path.splitdrive(self.save_dir)[0] + os.sep
+                free_space = shutil.disk_usage(check_path).free
             except Exception:
                 free_space = 0
-            if total_length > free_space:
+            if free_space > 0 and total_length > free_space:
                 self.timer.stop()
                 msg = errors.err_disk_full(total_length / 1024**3, free_space / 1024**3)
                 self._show_error(msg, show_try_again=False)
@@ -151,24 +230,50 @@ class DownloadWidget(QWidget):
         speed = int(status.get("downloadSpeed", 0))
         
         if total_length > 0:
+            self._metadata_stall_count = 0
             pct = int(completed_length / total_length * 100)
             self.progress.setValue(pct)
-            self.lbl_status.setText(f"Downloading... ({completed_length/1024**2:.1f} MB / {total_length/1024**2:.1f} MB)")
+            completed_mb = completed_length / (1024**2)
+            total_mb = total_length / (1024**2)
+            if total_mb >= 1024:
+                self.lbl_status.setText(f"Downloading: {completed_mb/1024:.2f} GB / {total_mb/1024:.2f} GB ({pct}%)")
+            else:
+                self.lbl_status.setText(f"Downloading: {completed_mb:.1f} MB / {total_mb:.1f} MB ({pct}%)")
         else:
             self.progress.setValue(0)
+            self._metadata_stall_count += 1
+            if self._metadata_stall_count < 30:
+                self.lbl_status.setText("Connecting to peers & getting movie metadata...")
+            elif self._metadata_stall_count < 120:
+                self.lbl_status.setText("Searching for peers... Ensure the watch party host is online and seeding.")
+            else:
+                self.timer.stop()
+                msg = errors.err_torrent_metadata_timeout()
+                self._show_error(msg)
+                return
             
-        self.lbl_speed.setText(f"{speed/1024:.1f} KB/s" if speed < 1024**2 else f"{speed/1024**2:.1f} MB/s")
+        if speed < 1024:
+            self.lbl_speed.setText(f"{speed} B/s")
+        elif speed < 1024**2:
+            self.lbl_speed.setText(f"{speed/1024:.1f} KB/s")
+        else:
+            self.lbl_speed.setText(f"{speed/1024**2:.1f} MB/s")
         
         if speed > 0 and total_length > completed_length:
             eta_sec = (total_length - completed_length) / speed
-            self.lbl_eta.setText(f"ETA: {int(eta_sec)}s")
+            if eta_sec >= 60:
+                mins = int(eta_sec // 60)
+                secs = int(eta_sec % 60)
+                self.lbl_eta.setText(f"ETA: {mins}m {secs}s")
+            else:
+                self.lbl_eta.setText(f"ETA: {int(eta_sec)}s")
         else:
             self.lbl_eta.setText("ETA: --")
         
-        # Detect stall (no peers)
+        # Detect stall
         if total_length > 0 and speed == 0 and completed_length < total_length:
             self._stall_count += 1
-            if self._stall_count >= 120:  # 60 seconds at 500ms poll
+            if self._stall_count >= 120:  # 60 seconds
                 self.timer.stop()
                 msg = errors.err_torrent_no_peers()
                 self._show_error(msg)
@@ -181,11 +286,13 @@ class DownloadWidget(QWidget):
             followed_by = status.get("followedBy")
             if followed_by:
                 self.gid = followed_by[0]
-                self.lbl_status.setText("Metadata fetched, starting payload download...")
+                self.lbl_status.setText("Metadata received, starting video download...")
                 self._stall_count = 0
+                self._metadata_stall_count = 0
             else:
                 self.timer.stop()
-                self.lbl_status.setText("Complete!")
+                self.progress.setValue(100)
+                self.lbl_status.setText("Download Complete!")
                 self._handle_completion(status)
                 
         elif state == "error":
@@ -194,7 +301,6 @@ class DownloadWidget(QWidget):
             err_msg = status.get("errorMessage", "Unknown error")
             launcher_logger.error(f"aria2 error code={err_code}: {err_msg}")
             
-            # Classify error
             if err_code in (2, 3, 19):
                 msg = errors.err_network_lost()
             elif err_code == 24:
@@ -227,7 +333,7 @@ class DownloadWidget(QWidget):
                 path = f.get("path", "")
                 size = int(f.get("length", 0))
                 ext = os.path.splitext(path)[1].lower()
-                if ext in [".mkv", ".mp4", ".avi", ".mov"] and size > largest_size:
+                if ext in [".mkv", ".mp4", ".avi", ".mov", ".wmv", ".webm", ".flv"] and size > largest_size:
                     largest_size = size
                     media_path = path
                     
@@ -280,3 +386,15 @@ class DownloadWidget(QWidget):
         if self.manager:
             self.manager.stop()
             self.manager = None
+
+    def _on_select_local_file(self):
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "Select Video File", "",
+            "Video Files (*.mp4 *.mkv *.avi *.mov *.wmv *.webm *.flv);;All Files (*.*)"
+        )
+        if file_path and os.path.isfile(file_path):
+            self.timer.stop()
+            self._cleanup()
+            self.lbl_status.setText("Using selected video file.")
+            self.progress.setValue(100)
+            self.download_complete.emit(file_path)

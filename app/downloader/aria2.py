@@ -2,6 +2,7 @@ import os
 import subprocess
 import json
 import urllib.request
+import urllib.parse
 import socket
 import time
 import random
@@ -9,6 +10,7 @@ import string
 import base64
 from logger import launcher_logger
 from deps import find_aria2c
+from torrent_creator import FALLBACK_TRACKERS
 
 class Aria2Error(Exception):
     pass
@@ -46,17 +48,31 @@ class Aria2Manager:
             f"--dir={save_dir}",
             "--bt-metadata-only=false",
             "--bt-save-metadata=true",
+            "--enable-dht=true",
+            "--enable-peer-exchange=true",
+            "--bt-enable-lpd=true",
+            "--follow-torrent=mem",
+            "--listen-port=6881-6999",
+            "--dht-listen-port=6881-6999",
+            "--bt-max-peers=100",
+            "--file-allocation=none",
             "--seed-time=0",
             "--summary-interval=0",
-            "--console-log-level=error"
+            "--console-log-level=error",
+            "--bt-tracker=" + ",".join(FALLBACK_TRACKERS),
         ]
         
         # Start detached without showing a console window on Windows
-        CREATE_NO_WINDOW = 0x08000000
-        self.process = subprocess.Popen(cmd, creationflags=CREATE_NO_WINDOW, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        creation_flags = getattr(subprocess, 'CREATE_NO_WINDOW', 0)
+        self.process = subprocess.Popen(
+            cmd,
+            creationflags=creation_flags,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
         
         # Wait for RPC to be available
-        for _ in range(20):
+        for _ in range(30):
             time.sleep(0.1)
             try:
                 self.get_version()
@@ -72,9 +88,12 @@ class Aria2Manager:
         if self.process:
             try:
                 self.process.terminate()
-                self.process.wait(timeout=2)
+                self.process.wait(timeout=3)
             except Exception:
-                self.process.kill()
+                try:
+                    self.process.kill()
+                except Exception:
+                    pass
             self.process = None
             launcher_logger.info("aria2c stopped.")
 
@@ -94,7 +113,7 @@ class Aria2Manager:
         req = urllib.request.Request(self.rpc_url, data=json.dumps(req_data).encode('utf-8'),
                                      headers={'Content-Type': 'application/json'})
         try:
-            with urllib.request.urlopen(req, timeout=2) as response:
+            with urllib.request.urlopen(req, timeout=5) as response:
                 result = json.loads(response.read().decode('utf-8'))
                 if "error" in result:
                     raise Aria2Error(result["error"].get("message", "Unknown RPC Error"))
@@ -106,11 +125,16 @@ class Aria2Manager:
         return self._call("aria2.getVersion")
 
     def add_uri(self, uri: str) -> str:
-        """Returns the GID of the new download."""
-        return self._call("aria2.addUri", [[uri]])
+        """Add a URI (magnet link or HTTP URL) for download. Returns the GID."""
+        clean_uri = uri.strip()
+        # If it's a magnet link without trackers, append public trackers for faster peer discovery
+        if clean_uri.startswith("magnet:") and "&tr=" not in clean_uri:
+            for tr in FALLBACK_TRACKERS:
+                clean_uri += f"&tr={urllib.parse.quote(tr)}"
+        return self._call("aria2.addUri", [[clean_uri]])
 
     def add_torrent(self, torrent_path: str) -> str:
-        """Returns the GID of the new download."""
+        """Add a .torrent file for download. Returns the GID."""
         with open(torrent_path, "rb") as f:
             b64 = base64.b64encode(f.read()).decode('utf-8')
         return self._call("aria2.addTorrent", [b64])

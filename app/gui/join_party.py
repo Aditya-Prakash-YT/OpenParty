@@ -1,8 +1,9 @@
 import os
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
                                QPushButton, QTextEdit, QFileDialog, QFrame,
-                               QFormLayout, QMessageBox)
+                               QFormLayout, QMessageBox, QGroupBox, QStyle)
 from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QGuiApplication, QDragEnterEvent, QDropEvent
 from config.loader import load_party_file, load_party_string, PartyFileError, PartyConfig
 import errors
 
@@ -12,158 +13,268 @@ class JoinPartyWidget(QWidget):
     
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.setAcceptDrops(True)
         self.loaded_config = None
         self._setup_ui()
         self._connect_signals()
 
     def _setup_ui(self):
         self.main_layout = QVBoxLayout(self)
+        self.main_layout.setContentsMargins(24, 20, 24, 20)
+        self.main_layout.setSpacing(14)
         
         # Header
         header_layout = QHBoxLayout()
-        self.btn_back = QPushButton("← Back")
-        self.btn_back.setFixedWidth(60)
+        self.btn_back = QPushButton("Back")
+        self.btn_back.setIcon(self.style().standardIcon(QStyle.SP_ArrowBack))
+        self.btn_back.setFixedWidth(80)
+        self.btn_back.setCursor(Qt.PointingHandCursor)
+        
+        title_box = QVBoxLayout()
         title = QLabel("Join Watch Party")
-        title.setStyleSheet("font-size: 20px; font-weight: bold;")
+        title.setStyleSheet("font-size: 20px; font-weight: 600; color: #0f172a;")
+        subtitle = QLabel("Open a party configuration file or paste invite data from a host.")
+        subtitle.setStyleSheet("font-size: 13px; color: #475569;")
+        title_box.addWidget(title)
+        title_box.addWidget(subtitle)
+        
         header_layout.addWidget(self.btn_back)
-        header_layout.addWidget(title)
+        header_layout.addSpacing(10)
+        header_layout.addLayout(title_box)
         header_layout.addStretch()
         self.main_layout.addLayout(header_layout)
         
-        # Input Section
+        # Input Section (Drag & Drop Zone + Buttons)
         self.input_frame = QFrame()
+        self.input_frame.setStyleSheet(
+            "QFrame { border: 2px dashed #cbd5e1; border-radius: 6px; background-color: #f8fafc; padding: 18px; }"
+        )
         input_layout = QVBoxLayout(self.input_frame)
-        input_layout.setContentsMargins(0, 10, 0, 10)
+        input_layout.setSpacing(12)
         
-        self.btn_open_file = QPushButton("Open .oparty File")
-        self.btn_open_file.setMinimumHeight(40)
-        input_layout.addWidget(self.btn_open_file)
+        lbl_drag = QLabel("Drag and drop an .oparty file here, or choose an option below:")
+        lbl_drag.setAlignment(Qt.AlignCenter)
+        lbl_drag.setStyleSheet("font-size: 13px; font-weight: 500; color: #475569; border: none; background: transparent;")
+        input_layout.addWidget(lbl_drag)
         
-        lbl_or = QLabel("— OR Paste Party Data below —")
-        lbl_or.setAlignment(Qt.AlignCenter)
-        lbl_or.setStyleSheet("color: #6b7280; margin: 10px 0;")
-        input_layout.addWidget(lbl_or)
+        btn_row = QHBoxLayout()
+        self.btn_open_file = QPushButton("Browse File...")
+        self.btn_open_file.setIcon(self.style().standardIcon(QStyle.SP_DialogOpenButton))
+        self.btn_open_file.setMinimumHeight(36)
+        self.btn_open_file.setCursor(Qt.PointingHandCursor)
+        self.btn_open_file.setStyleSheet(
+            "QPushButton { background-color: #2563eb; color: white; font-weight: 600; border-radius: 4px; padding: 6px 16px; border: none; }"
+            "QPushButton:hover { background-color: #1d4ed8; }"
+        )
+        
+        self.btn_paste_clipboard = QPushButton("Paste from Clipboard")
+        self.btn_paste_clipboard.setIcon(self.style().standardIcon(QStyle.SP_FileIcon))
+        self.btn_paste_clipboard.setMinimumHeight(36)
+        self.btn_paste_clipboard.setCursor(Qt.PointingHandCursor)
+        self.btn_paste_clipboard.setStyleSheet(
+            "QPushButton { background-color: #ffffff; color: #1e293b; font-weight: 500; border: 1px solid #cbd5e1; border-radius: 4px; padding: 6px 16px; }"
+            "QPushButton:hover { background-color: #f1f5f9; }"
+        )
+        btn_row.addWidget(self.btn_open_file)
+        btn_row.addWidget(self.btn_paste_clipboard)
+        input_layout.addLayout(btn_row)
+        
+        # Expandable manual paste box
+        self.btn_toggle_text = QPushButton("Enter party data manually...")
+        self.btn_toggle_text.setFlat(True)
+        self.btn_toggle_text.setCursor(Qt.PointingHandCursor)
+        self.btn_toggle_text.setStyleSheet("color: #64748b; font-size: 12px; border: none; background: transparent;")
+        input_layout.addWidget(self.btn_toggle_text, alignment=Qt.AlignCenter)
         
         self.text_paste = QTextEdit()
-        self.text_paste.setPlaceholderText("Paste JSON here...")
-        self.text_paste.setMaximumHeight(150)
+        self.text_paste.setPlaceholderText("Paste party JSON or invite code here...")
+        self.text_paste.setMaximumHeight(90)
+        self.text_paste.setStyleSheet("border: 1px solid #cbd5e1; border-radius: 4px; background-color: white; font-family: Consolas, monospace;")
+        self.text_paste.hide()
         input_layout.addWidget(self.text_paste)
         
-        self.btn_load_text = QPushButton("Load from Text")
+        self.btn_load_text = QPushButton("Load Pasted Text")
+        self.btn_load_text.setMinimumHeight(32)
+        self.btn_load_text.hide()
         input_layout.addWidget(self.btn_load_text)
         
         self.main_layout.addWidget(self.input_frame)
         
         # Error Label
         self.lbl_error = QLabel("")
-        self.lbl_error.setStyleSheet("color: #dc2626; font-weight: bold; font-size: 13px;")
+        self.lbl_error.setStyleSheet(
+            "color: #991b1b; background-color: #fef2f2; border: 1px solid #fca5a5; border-radius: 4px; padding: 10px; font-size: 13px;"
+        )
         self.lbl_error.setWordWrap(True)
         self.lbl_error.hide()
         self.main_layout.addWidget(self.lbl_error)
         
-        # Details Panel
+        # Details Panel (Party Summary Card)
         self.details_frame = QFrame()
-        # Light gray background just to separate it visually
-        self.details_frame.setStyleSheet("QFrame { background-color: #f3f4f6; border-radius: 8px; } QLabel { background-color: transparent; }")
+        self.details_frame.setStyleSheet(
+            "QFrame { background-color: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 14px; }"
+            "QLabel { background-color: transparent; border: none; }"
+        )
         details_layout = QVBoxLayout(self.details_frame)
+        details_layout.setSpacing(10)
         
+        card_header = QHBoxLayout()
         self.lbl_details_title = QLabel("Party Details")
-        self.lbl_details_title.setStyleSheet("font-weight: bold; font-size: 16px;")
-        details_layout.addWidget(self.lbl_details_title)
+        self.lbl_details_title.setStyleSheet("font-weight: 600; font-size: 15px; color: #0f172a;")
+        card_header.addWidget(self.lbl_details_title)
+        card_header.addStretch()
+        details_layout.addLayout(card_header)
         
         self.form_details = QFormLayout()
+        self.form_details.setSpacing(6)
         
         self.val_name = QLabel("")
+        self.val_host = QLabel("")
+        self.val_media = QLabel("")
         self.val_room = QLabel("")
         self.val_server = QLabel("")
-        self.val_source = QLabel("")
         
-        # Make values selectable
-        for lbl in (self.val_name, self.val_room, self.val_server, self.val_source):
+        for lbl in (self.val_name, self.val_host, self.val_media, self.val_room, self.val_server):
             lbl.setTextInteractionFlags(Qt.TextSelectableByMouse)
-            lbl.setStyleSheet("font-weight: 500;")
+            lbl.setStyleSheet("font-weight: 500; color: #1e293b; font-size: 13px;")
         
         self.form_details.addRow("Party Name:", self.val_name)
-        self.form_details.addRow("Room:", self.val_room)
+        self.form_details.addRow("Host:", self.val_host)
+        self.form_details.addRow("Media:", self.val_media)
+        self.form_details.addRow("Sync Room:", self.val_room)
         self.form_details.addRow("Server:", self.val_server)
-        self.form_details.addRow("Media Source:", self.val_source)
         
         details_layout.addLayout(self.form_details)
         
-        self.btn_start = QPushButton("Start Party")
-        self.btn_start.setMinimumHeight(50)
-        # We can't style background-color without breaking native styling sometimes, 
-        # but let's give it a bold look.
-        self.btn_start.setStyleSheet("font-size: 16px; font-weight: bold;")
+        self.btn_start = QPushButton("Start Watching")
+        self.btn_start.setIcon(self.style().standardIcon(QStyle.SP_MediaPlay))
+        self.btn_start.setMinimumHeight(42)
+        self.btn_start.setCursor(Qt.PointingHandCursor)
+        self.btn_start.setStyleSheet(
+            "QPushButton { background-color: #16a34a; color: white; font-size: 14px; font-weight: 600; border-radius: 4px; border: none; }"
+            "QPushButton:hover { background-color: #15803d; }"
+        )
         details_layout.addWidget(self.btn_start)
         
         self.details_frame.hide()
         self.main_layout.addWidget(self.details_frame)
-        
         self.main_layout.addStretch()
 
     def _connect_signals(self):
         self.btn_back.clicked.connect(self._on_back)
         self.btn_open_file.clicked.connect(self._on_open_file)
+        self.btn_paste_clipboard.clicked.connect(self._on_paste_clipboard)
+        self.btn_toggle_text.clicked.connect(self._toggle_text_box)
         self.btn_load_text.clicked.connect(self._on_load_text)
         self.btn_start.clicked.connect(self._on_start)
-        
+
+    def _toggle_text_box(self):
+        if self.text_paste.isVisible():
+            self.text_paste.hide()
+            self.btn_load_text.hide()
+            self.btn_toggle_text.setText("Enter party data manually...")
+        else:
+            self.text_paste.show()
+            self.btn_load_text.show()
+            self.btn_toggle_text.setText("Hide manual input...")
+
+    def dragEnterEvent(self, event: QDragEnterEvent):
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+
+    def dropEvent(self, event: QDropEvent):
+        urls = event.mimeData().urls()
+        if urls:
+            file_path = urls[0].toLocalFile()
+            if file_path:
+                self.load_file(file_path)
+
+    def load_file(self, file_path: str):
+        """Public method to load a party file directly (e.g. from CLI)."""
+        if not os.path.exists(file_path):
+            self._show_error(errors.err_party_file_not_found(file_path))
+            return False
+        try:
+            config = load_party_file(file_path)
+            self._show_details(config)
+            return True
+        except PartyFileError as e:
+            self._show_error(errors.err_party_file_corrupt(str(e)))
+            return False
+
     def _on_back(self):
-        # Reset view when going back
         self.details_frame.hide()
         self.lbl_error.hide()
         self.text_paste.clear()
         self.loaded_config = None
         self.back_requested.emit()
-        
+
     def _on_open_file(self):
-        file_path, _ = QFileDialog.getOpenFileName(self, "Open Party File", "", "OpenParty Files (*.oparty);;All Files (*.*)")
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "Open Party File", "", "OpenParty Files (*.oparty);;All Files (*.*)"
+        )
         if file_path:
-            if not os.path.exists(file_path):
-                self._show_error(errors.err_party_file_not_found(file_path))
-                return
-            try:
-                config = load_party_file(file_path)
-                self._show_details(config)
-            except PartyFileError as e:
-                self._show_error(errors.err_party_file_corrupt(str(e)))
-                
+            self.load_file(file_path)
+
+    def _on_paste_clipboard(self):
+        cb = QGuiApplication.clipboard()
+        text = cb.text().strip()
+        if not text:
+            self._show_error(errors.format_error(
+                "Clipboard is empty.",
+                "No text was found on the clipboard.",
+                "Copy the party invite or file content from your message app first."
+            ))
+            return
+        
+        self.load_text_data(text)
+
     def _on_load_text(self):
         text = self.text_paste.toPlainText().strip()
         if not text:
             self._show_error(errors.format_error(
                 "No data to load.",
                 "The text box is empty.",
-                "Paste the party data (JSON) into the text box first."
+                "Paste the party data into the text box first."
             ))
             return
-            
+        self.load_text_data(text)
+
+    def load_text_data(self, text: str):
         try:
             config = load_party_string(text)
             self._show_details(config)
         except PartyFileError as e:
             self._show_error(errors.err_party_file_corrupt(str(e)))
-            
+
     def _show_error(self, msg: str):
         self.details_frame.hide()
-        self.lbl_error.setText(f"Error: {msg}")
+        self.lbl_error.setText(msg)
         self.lbl_error.show()
-        
+
     def _show_details(self, config: PartyConfig):
         self.loaded_config = config
         self.lbl_error.hide()
-        
+
         self.val_name.setText(config.party.name)
+        host = getattr(config.party, 'created_by', '') or "Host"
+        self.val_host.setText(host)
+
+        media_name = config.media.file.name_hint or "Movie file"
+        size_bytes = config.media.file.size
+        if size_bytes and size_bytes > 0:
+            if size_bytes >= 1024**3:
+                size_str = f" ({size_bytes / 1024**3:.2f} GB)"
+            else:
+                size_str = f" ({size_bytes / 1024**2:.1f} MB)"
+            media_name += size_str
+        self.val_media.setText(media_name)
+
         self.val_room.setText(config.sync.room)
         self.val_server.setText(f"{config.sync.server}:{config.sync.port}")
-        
-        source_val = config.media.source.value
-        if len(source_val) > 50:
-            source_val = source_val[:47] + "..."
-        self.val_source.setText(f"[{config.media.source.type}] {source_val}")
-        
+
         self.details_frame.show()
-        
+
     def _on_start(self):
         if self.loaded_config:
             self.party_loaded.emit(self.loaded_config)

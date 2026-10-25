@@ -219,10 +219,10 @@ echo Syncplay found. >> %LOGFILE%
 
 
 :: ============================================================
-:: 5. QBITTORRENT
+:: 5. QBITTORRENT (Optional - for advanced seeding)
 :: ============================================================
 echo.
-echo [5/5] Checking qBittorrent...
+echo [5/5] Checking qBittorrent (optional, for enhanced seeding)...
 echo [5/5] Checking qBittorrent... >> %LOGFILE%
 if exist "C:\Program Files\qBittorrent\qbittorrent.exe" goto :QbitOK
 if exist "C:\Program Files (x86)\qBittorrent\qbittorrent.exe" goto :QbitOK
@@ -243,18 +243,46 @@ echo Running qBittorrent installer silently... >> %LOGFILE%
 
 if exist "C:\Program Files\qBittorrent\qbittorrent.exe" goto :QbitOK
 if exist "C:\Program Files (x86)\qBittorrent\qbittorrent.exe" goto :QbitOK
-echo [WARNING] qBittorrent installer completed, but may not be in default location.
-echo [WARNING] qBittorrent install location unclear. >> %LOGFILE%
+echo [NOTE] qBittorrent not installed. aria2c will handle seeding instead.
+echo [NOTE] qBittorrent install skipped or failed. >> %LOGFILE%
 goto :QbitDone
 
 :QbitDownloadFailed
-echo [ERROR] Failed to download qBittorrent. Check install.log.
-echo [ERROR] Failed to download qBittorrent. >> %LOGFILE%
+echo [NOTE] Could not download qBittorrent. aria2c will handle seeding instead.
+echo [NOTE] qBittorrent download failed. >> %LOGFILE%
 goto :QbitDone
 
 :QbitOK
 echo qBittorrent is installed.
 echo qBittorrent found. >> %LOGFILE%
+
+:: Enable qBittorrent Web UI for API-based seeding
+echo Configuring qBittorrent Web UI for OpenParty...
+echo Configuring qBittorrent Web UI... >> %LOGFILE%
+set QBIT_CONF=%APPDATA%\qBittorrent\qBittorrent.ini
+if exist "%QBIT_CONF%" (
+    findstr /C:"WebUI\Enabled" "%QBIT_CONF%" >nul 2>&1
+    if %errorLevel% neq 0 (
+        echo. >> "%QBIT_CONF%"
+        echo [Preferences] >> "%QBIT_CONF%"
+        echo WebUI\Enabled=true >> "%QBIT_CONF%"
+        echo WebUI\Port=8080 >> "%QBIT_CONF%"
+        echo WebUI\LocalHostAuth=false >> "%QBIT_CONF%"
+        echo qBittorrent Web UI enabled for local access.
+        echo qBittorrent Web UI configured. >> %LOGFILE%
+    ) else (
+        echo qBittorrent Web UI already configured.
+    )
+) else (
+    :: Create config directory and file if it doesn't exist
+    if not exist "%APPDATA%\qBittorrent" mkdir "%APPDATA%\qBittorrent"
+    echo [Preferences] > "%QBIT_CONF%"
+    echo WebUI\Enabled=true >> "%QBIT_CONF%"
+    echo WebUI\Port=8080 >> "%QBIT_CONF%"
+    echo WebUI\LocalHostAuth=false >> "%QBIT_CONF%"
+    echo qBittorrent Web UI configured for first use.
+    echo qBittorrent Web UI configured (new install). >> %LOGFILE%
+)
 
 :QbitDone
 
