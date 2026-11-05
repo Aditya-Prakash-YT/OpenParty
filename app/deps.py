@@ -2,7 +2,6 @@ import os
 import sys
 import shutil
 import zipfile
-import subprocess
 from typing import Dict, Optional
 
 # Common search locations beyond PATH
@@ -68,10 +67,22 @@ def ensure_syncplay_unpacked():
                 dest = os.path.join(base, "syncplay-portable")
                 os.makedirs(dest, exist_ok=True)
                 with zipfile.ZipFile(zip_candidate, 'r') as zf:
-                    zf.extractall(dest)
+                    root = os.path.realpath(dest)
+                    for member in zf.infolist():
+                        # Reject absolute paths, parent traversal, and symlinks
+                        # before writing any content from this archive.
+                        target = os.path.realpath(os.path.join(root, member.filename))
+                        if os.path.commonpath((root, target)) != root:
+                            raise ValueError("Syncplay archive contains an unsafe path")
+                        unix_mode = member.external_attr >> 16
+                        if (unix_mode & 0o170000) == 0o120000:
+                            raise ValueError("Syncplay archive contains a symbolic link")
+                    zf.extractall(root)
                 return
             except Exception:
-                pass
+                # Keep dependency detection non-fatal; find_syncplay will report
+                # the dependency as missing and the UI can direct the user to setup.
+                continue
 
 
 def find_vlc() -> Optional[str]:
@@ -140,8 +151,9 @@ def run_setup_installer() -> bool:
     if not os.path.isfile(setup_cmd):
         return False
     try:
-        cmd = f'powershell -Command "Start-Process -FilePath \'{setup_cmd}\' -Verb RunAs"'
-        subprocess.Popen(cmd, shell=True)
+        # ShellExecute handles spaces/quotes in the path and asks Windows for
+        # elevation without interpolating a filesystem path into shell code.
+        os.startfile(setup_cmd, "runas")
         return True
     except Exception:
         return False

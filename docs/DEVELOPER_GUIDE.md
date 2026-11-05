@@ -5,7 +5,8 @@ OpenParty is a decentralized watch party orchestrator built in Python (PySide6).
 ## Architecture Overview
 
 - **`setup/setup.cmd`**: Handles UAC elevation, checks for Python 3.12+ (downloads installer if missing), installs pip dependencies (`requirements.txt`), installs VLC and qBittorrent silently, extracts portable aria2c to `setup/tools/aria2/`, downloads and runs the Syncplay installer, and registers the `.oparty` file association. All downloads use PowerShell `Invoke-WebRequest` with TLS 1.2 — no `winget` required.
-- **`app/main.py`**: The entrypoint for the PySide6 UI. Uses a `QStackedWidget` to manage screens.
+- **`app/main.py`**: The entrypoint and screen-flow coordinator. It wires screen signals and moves the `QStackedWidget` between workflows; it does not construct the home-screen UI.
+- **`app/gui/home.py`**: The home screen, dependency status banner, and host/join/setup/help actions. It emits intent signals so navigation remains in `main.py`.
 - **`app/config/`**: JSON parsing and validation layer (`loader.py`). Strongly typed using Python Dataclasses to represent `.oparty` files.
 - **`app/downloader/`**: An asynchronous JSON-RPC client (`aria2.py`) bridging Python to a detached `aria2c` process. It dynamically binds to open ports and generates random secret tokens.
 - **`app/torrent_creator.py`**: A zero-dependency qBittorrent Web API client that handles authentication and uses the v5 `torrentCreator` API (with a pure-Python Bencode fallback for v4) to automate torrent creation and seeding for the host.

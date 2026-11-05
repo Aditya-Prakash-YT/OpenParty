@@ -1,12 +1,12 @@
 import os
 import subprocess
 import json
+import urllib.error
 import urllib.request
 import urllib.parse
 import socket
 import time
-import random
-import string
+import secrets
 import base64
 from logger import launcher_logger
 from deps import find_aria2c
@@ -21,7 +21,8 @@ def get_free_port() -> int:
         return s.getsockname()[1]
 
 def generate_secret(length=16) -> str:
-    return ''.join(random.choices(string.ascii_letters + string.digits, k=length))
+    """Generate an unpredictable RPC token for the local aria2 process."""
+    return secrets.token_urlsafe(max(1, length))[:length]
 
 class Aria2Manager:
     def __init__(self):
@@ -32,6 +33,12 @@ class Aria2Manager:
         self._request_id = 0
 
     def start(self, save_dir: str):
+        if self.process is not None:
+            if self.process.poll() is None:
+                self.stop()
+            else:
+                self.process = None
+
         exe = find_aria2c()
         if not exe:
             raise Aria2Error("aria2c not found. Please run setup.cmd.")
@@ -40,6 +47,7 @@ class Aria2Manager:
         
         cmd = [
             exe,
+            "--no-conf=true",
             "--enable-rpc=true",
             f"--rpc-listen-port={self.port}",
             f"--rpc-secret={self.secret}",
@@ -74,8 +82,12 @@ class Aria2Manager:
         # Wait for RPC to be available
         for _ in range(30):
             time.sleep(0.1)
+            if self.process.poll() is not None:
+                break
             try:
-                self.get_version()
+                version = self.get_version()
+                if not isinstance(version, dict) or not version.get("version"):
+                    continue
                 launcher_logger.info(f"aria2c started on port {self.port}")
                 return
             except Exception:
@@ -85,16 +97,18 @@ class Aria2Manager:
         raise Aria2Error("aria2c failed to start or bind to RPC port.")
 
     def stop(self):
-        if self.process:
+        proc = self.process
+        self.process = None
+        if proc:
             try:
-                self.process.terminate()
-                self.process.wait(timeout=3)
+                proc.terminate()
+                proc.wait(timeout=3)
             except Exception:
                 try:
-                    self.process.kill()
+                    proc.kill()
+                    proc.wait(timeout=2)
                 except Exception:
                     pass
-            self.process = None
             launcher_logger.info("aria2c stopped.")
 
     def _call(self, method: str, params: list = None):
@@ -141,7 +155,10 @@ class Aria2Manager:
 
     def get_status(self, gid: str):
         """Returns status dictionary from aria2c."""
-        return self._call("aria2.tellStatus", [gid])
+        status = self._call("aria2.tellStatus", [gid])
+        if not isinstance(status, dict):
+            raise Aria2Error("aria2c returned an invalid download status.")
+        return status
         
     def remove(self, gid: str):
         """Removes a download."""

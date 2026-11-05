@@ -9,6 +9,7 @@ PartyFileError with a single human-readable reason on failure.
 import json
 import re
 import os
+import urllib.parse
 from dataclasses import dataclass, field
 from typing import List, Optional
 
@@ -147,29 +148,41 @@ def _require_int(data: dict, key: str, section: str) -> int:
     return value
 
 
-def _optional_string(data: dict, key: str, default: str = "") -> str:
+def _optional_string(data: dict, key: str, default: str = "", section: str = "root") -> str:
     value = data.get(key, default)
     if value is None:
         return default
     if not isinstance(value, str):
-        return default
+        raise PartyFileError(f"'{key}' in '{section}' must be text or null.")
     return value
 
 
-def _optional_int(data: dict, key: str, default: int = 0) -> int:
+def _optional_int(data: dict, key: str, default: int = 0, section: str = "root") -> int:
     value = data.get(key, default)
     if value is None:
         return default
     if not isinstance(value, int) or isinstance(value, bool):
-        return default
+        raise PartyFileError(f"'{key}' in '{section}' must be a whole number or null.")
     return value
 
 
-def _optional_bool(data: dict, key: str, default: bool = False) -> bool:
+def _optional_bool(data: dict, key: str, default: bool = False, section: str = "root") -> bool:
     value = data.get(key, default)
-    if not isinstance(value, bool):
+    if value is None:
         return default
+    if not isinstance(value, bool):
+        raise PartyFileError(f"'{key}' in '{section}' must be true, false, or null.")
     return value
+
+
+def _optional_section(data: dict, key: str) -> dict:
+    """Read an optional object section without hiding malformed values."""
+    section = data.get(key, {})
+    if section is None:
+        return {}
+    if not isinstance(section, dict):
+        raise PartyFileError(f"'{key}' must be a section (object), not {type(section).__name__}.")
+    return section
 
 
 # ---------------------------------------------------------------------------
@@ -202,9 +215,9 @@ def _validate_party(data: dict) -> PartyInfo:
 
     return PartyInfo(
         name=name,
-        description=_optional_string(section, "description"),
-        created_at=_optional_string(section, "created_at"),
-        created_by=_optional_string(section, "created_by"),
+        description=_optional_string(section, "description", section="party"),
+        created_at=_optional_string(section, "created_at", section="party"),
+        created_by=_optional_string(section, "created_by", section="party"),
     )
 
 
@@ -213,10 +226,17 @@ def _validate_media_source(source_data: dict) -> MediaSource:
     value = _require_string(source_data, "value", "media.source")
 
     if source_type == "magnet":
-        if not value.startswith("magnet:?"):
+        try:
+            parsed = urllib.parse.urlsplit(value)
+            query = urllib.parse.parse_qs(parsed.query, keep_blank_values=True)
+        except ValueError as e:
+            raise PartyFileError("The media source is not a valid magnet link.") from e
+        if (parsed.scheme.lower() != "magnet" or
+                not query.get("xt") or
+                not any(topic.strip() for topic in query["xt"])):
             raise PartyFileError(
-                "The media source type is 'magnet', but the value doesn't look like "
-                "a magnet link. It should start with 'magnet:?'."
+                "The media source type is 'magnet', but the value is missing a "
+                "magnet topic (xt) parameter."
             )
     elif source_type == "torrent-file":
         raise PartyFileError(
@@ -232,7 +252,7 @@ def _validate_media_source(source_data: dict) -> MediaSource:
 
 
 def _validate_media_file(file_data: dict) -> MediaFile:
-    name_hint = _optional_string(file_data, "name_hint")
+    name_hint = _optional_string(file_data, "name_hint", section="media.file")
     size = file_data.get("size", None)
     if size is not None:
         if not isinstance(size, int) or isinstance(size, bool) or size < 0:
@@ -264,8 +284,10 @@ def _validate_media(data: dict) -> MediaInfo:
     source = _validate_media_source(source_data)
 
     file_data = section.get("file", {})
-    if not isinstance(file_data, dict):
+    if file_data is None:
         file_data = {}
+    if not isinstance(file_data, dict):
+        raise PartyFileError("'file' in 'media' must be a section (object).")
     media_file = _validate_media_file(file_data)
 
     subs_data = section.get("subtitles", [])
@@ -282,32 +304,28 @@ def _validate_sync(data: dict) -> SyncInfo:
         raise PartyFileError("'sync' must be a section (object), not a single value.")
 
     room = _require_string(section, "room", "sync")
-    server = _optional_string(section, "server", "syncplay.pl")
+    server = _optional_string(section, "server", "syncplay.pl", "sync")
     if not server.strip():
         server = "syncplay.pl"
 
-    port = _optional_int(section, "port", 8997)
+    port = _optional_int(section, "port", 8997, "sync")
     if port < 1 or port > 65535:
         raise PartyFileError(f"Port {port} is not valid. It must be between 1 and 65535.")
 
-    password = _optional_string(section, "password", "")
+    password = _optional_string(section, "password", "", "sync")
 
     return SyncInfo(server=server, port=port, room=room, password=password)
 
 
 def _validate_playback(data: dict) -> PlaybackInfo:
-    section = data.get("playback", {})
-    if section is None or not isinstance(section, dict):
-        return PlaybackInfo()
+    section = _optional_section(data, "playback")
     return PlaybackInfo(
-        start_paused=_optional_bool(section, "start_paused", True)
+        start_paused=_optional_bool(section, "start_paused", True, "playback")
     )
 
 
 def _validate_integrity(data: dict) -> IntegrityInfo:
-    section = data.get("integrity", {})
-    if section is None or not isinstance(section, dict):
-        return IntegrityInfo()
+    section = _optional_section(data, "integrity")
     sha256 = section.get("sha256", None)
     if sha256 is not None and not isinstance(sha256, str):
         raise PartyFileError("'sha256' in 'integrity' must be text or null.")
@@ -319,11 +337,11 @@ def _validate_integrity(data: dict) -> IntegrityInfo:
 
 
 def _validate_compatibility(data: dict) -> CompatibilityInfo:
-    section = data.get("compatibility", {})
-    if section is None or not isinstance(section, dict):
-        return CompatibilityInfo()
+    section = _optional_section(data, "compatibility")
 
-    min_version_str = _optional_string(section, "min_openparty_version", "1.0.0")
+    min_version_str = _optional_string(
+        section, "min_openparty_version", "1.0.0", "compatibility"
+    )
     if not min_version_str.strip():
         min_version_str = "1.0.0"
 

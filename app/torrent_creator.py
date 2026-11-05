@@ -19,8 +19,7 @@ import urllib.error
 import http.cookiejar
 import subprocess
 import socket
-import random
-import string
+import secrets
 from typing import Optional, Tuple
 
 import atexit
@@ -121,26 +120,36 @@ def _create_torrent_bytes(file_path: str,
                           ) -> Tuple[bytes, str]:
     """Create a .torrent file in memory.  Returns (torrent_bytes, info_hash_hex)."""
     file_path = os.path.abspath(file_path)
-    file_size = os.path.getsize(file_path)
+    initial_stat = os.stat(file_path)
+    file_size = initial_stat.st_size
+    if file_size <= 0:
+        raise ValueError("Cannot create a torrent from an empty file.")
     file_name = os.path.basename(file_path)
 
     if piece_length is None:
         piece_length = get_optimal_piece_length(file_size)
 
-    # Hash pieces
-    pieces = b""
+    # Build piece hashes separately and join once. Repeated bytes concatenation
+    # copies the accumulated buffer on every iteration, making large video
+    # files needlessly quadratic in time and memory traffic.
+    piece_hashes = []
     with open(file_path, "rb") as f:
         while True:
             chunk = f.read(piece_length)
             if not chunk:
                 break
-            pieces += hashlib.sha1(chunk).digest()
+            piece_hashes.append(hashlib.sha1(chunk).digest())
+
+    final_stat = os.stat(file_path)
+    if (final_stat.st_size != file_size or
+            final_stat.st_mtime_ns != initial_stat.st_mtime_ns):
+        raise ValueError("The media file changed while its torrent was being created.")
 
     info = {
         "length": file_size,
         "name": file_name,
         "piece length": piece_length,
-        "pieces": pieces,
+        "pieces": b"".join(piece_hashes),
     }
 
     info_bencoded = _bencode(info)
@@ -220,12 +229,15 @@ def seed_with_aria2c(torrent_path: str, data_dir: str,
         aria2c_exe = find_aria2c()
     if not aria2c_exe:
         return None
+    if not os.path.isfile(torrent_path) or not os.path.isdir(data_dir):
+        return None
 
     rpc_port = _get_free_port()
-    secret = ''.join(random.choices(string.ascii_letters + string.digits, k=16))
+    secret = secrets.token_urlsafe(16)
 
     cmd = [
         aria2c_exe,
+        "--no-conf=true",
         "--enable-rpc=true",
         f"--rpc-listen-port={rpc_port}",
         f"--rpc-secret={secret}",
@@ -256,12 +268,44 @@ def seed_with_aria2c(torrent_path: str, data_dir: str,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
-        # Give it a moment to start
-        time.sleep(0.5)
-        if proc.poll() is not None:
-            return None
-        return proc
+        # Do not report success just because the process survived its first
+        # half-second. aria2 may still be starting or may fail while loading
+        # the torrent. Wait until its RPC endpoint is actually ready.
+        rpc_url = f"http://127.0.0.1:{rpc_port}/jsonrpc"
+        rpc_request = urllib.request.Request(
+            rpc_url,
+            data=json.dumps({
+                "jsonrpc": "2.0",
+                "id": "openparty-seeder-ready",
+                "method": "aria2.tellActive",
+                "params": [f"token:{secret}"],
+            }).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+        )
+        deadline = time.monotonic() + 8
+        while time.monotonic() < deadline:
+            if proc.poll() is not None:
+                return None
+            try:
+                with urllib.request.urlopen(rpc_request, timeout=0.5) as response:
+                    result = json.loads(response.read().decode("utf-8"))
+                if result.get("result"):
+                    return proc
+            except Exception:
+                time.sleep(0.2)
+
+        proc.terminate()
+        try:
+            proc.wait(timeout=2)
+        except Exception:
+            proc.kill()
+        return None
     except Exception:
+        try:
+            if "proc" in locals() and proc.poll() is None:
+                proc.terminate()
+        except Exception:
+            pass
         return None
 
 
@@ -270,36 +314,55 @@ class SeederManager:
     _active_seed_process: Optional[subprocess.Popen] = None
     _active_torrent_path: Optional[str] = None
     _active_file_path: Optional[str] = None
+    _active_info_hash: Optional[str] = None
 
     @classmethod
-    def set_seed_process(cls, proc: subprocess.Popen, torrent_path: str, file_path: str):
+    def set_seed_process(cls, proc: subprocess.Popen, torrent_path: str,
+                         file_path: str, info_hash: Optional[str] = None):
         cls.stop_seeding()
         cls._active_seed_process = proc
         cls._active_torrent_path = torrent_path
         cls._active_file_path = file_path
+        cls._active_info_hash = info_hash.lower() if info_hash else None
 
     @classmethod
     def stop_seeding(cls):
-        if cls._active_seed_process:
+        proc = cls._active_seed_process
+        cls._active_seed_process = None
+        cls._active_torrent_path = None
+        cls._active_file_path = None
+        cls._active_info_hash = None
+        if not proc:
+            return
+        try:
+            proc.terminate()
+            proc.wait(timeout=2)
+        except Exception:
             try:
-                cls._active_seed_process.terminate()
-                cls._active_seed_process.wait(timeout=2)
+                proc.kill()
+                proc.wait(timeout=2)
             except Exception:
-                try:
-                    cls._active_seed_process.kill()
-                except Exception:
-                    pass
-            cls._active_seed_process = None
-            cls._active_torrent_path = None
-            cls._active_file_path = None
+                pass
 
     @classmethod
     def is_seeding(cls) -> bool:
-        return cls._active_seed_process is not None and cls._active_seed_process.poll() is None
+        if cls._active_seed_process is None:
+            return False
+        if cls._active_seed_process.poll() is None:
+            return True
+        cls.stop_seeding()
+        return False
 
     @classmethod
-    def get_current_file(cls) -> Optional[str]:
-        return cls._active_file_path
+    def get_current_file(cls, info_hash: Optional[str] = None) -> Optional[str]:
+        if cls._active_seed_process is None:
+            return None
+        if cls._active_seed_process.poll() is None:
+            if info_hash and cls._active_info_hash != info_hash.lower():
+                return None
+            return cls._active_file_path
+        cls.stop_seeding()
+        return None
 
 
 atexit.register(SeederManager.stop_seeding)

@@ -14,6 +14,7 @@ a = Analysis(
         'config',
         'config.loader',
         'gui',
+        'gui.home',
         'gui.create_party',
         'gui.join_party',
         'gui.download',

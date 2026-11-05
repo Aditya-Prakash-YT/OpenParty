@@ -1,5 +1,6 @@
 import os
 import shutil
+import urllib.parse
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QLabel, QProgressBar, 
                                QPushButton, QHBoxLayout, QFrame, QStyle, QFileDialog)
 from PySide6.QtCore import Qt, QTimer, Signal
@@ -31,50 +32,50 @@ class DownloadWidget(QWidget):
 
     def _setup_ui(self):
         self.main_layout = QVBoxLayout(self)
-        self.main_layout.setContentsMargins(24, 24, 24, 24)
-        self.main_layout.setSpacing(16)
+        self.main_layout.setContentsMargins(32, 30, 32, 28)
+        self.main_layout.setSpacing(20)
         
         # Header
         self.lbl_title = QLabel("Downloading Media")
-        self.lbl_title.setStyleSheet("font-size: 22px; font-weight: bold; color: #111827;")
+        self.lbl_title.setStyleSheet("font-size: 22px; font-weight: bold; color: #25323B;")
         self.lbl_title.setAlignment(Qt.AlignCenter)
         self.main_layout.addWidget(self.lbl_title)
         
         # Download Card Container
         card = QFrame()
         card.setStyleSheet(
-            "QFrame { background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 20px; }"
+            "QFrame { background-color: #FFFFFF; border: 1px solid #E1E7EA; border-radius: 12px; padding: 22px; }"
             "QLabel { background: transparent; border: none; }"
         )
         card_layout = QVBoxLayout(card)
         card_layout.setSpacing(14)
         
         self.lbl_movie_name = QLabel("")
-        self.lbl_movie_name.setStyleSheet("font-size: 15px; font-weight: 600; color: #1e293b;")
+        self.lbl_movie_name.setStyleSheet("font-size: 15px; font-weight: 600; color: #35434C;")
         self.lbl_movie_name.setAlignment(Qt.AlignCenter)
         self.lbl_movie_name.setWordWrap(True)
         card_layout.addWidget(self.lbl_movie_name)
         
         self.lbl_status = QLabel("Connecting to watch party peers...")
         self.lbl_status.setAlignment(Qt.AlignCenter)
-        self.lbl_status.setStyleSheet("font-size: 13px; color: #475569;")
+        self.lbl_status.setStyleSheet("font-size: 13px; color: #65747E;")
         card_layout.addWidget(self.lbl_status)
         
         self.progress = QProgressBar()
         self.progress.setValue(0)
         self.progress.setMinimumHeight(24)
         self.progress.setStyleSheet(
-            "QProgressBar { border: 1px solid #cbd5e1; border-radius: 6px; text-align: center; font-weight: bold; color: #1e293b; background-color: #ffffff; }"
-            "QProgressBar::chunk { background-color: #2563eb; border-radius: 5px; }"
+            "QProgressBar { border: 1px solid #DDE4E8; border-radius: 9px; text-align: center; font-weight: bold; color: #35434C; background-color: #FFFFFF; }"
+            "QProgressBar::chunk { background-color: #3E6478; border-radius: 5px; }"
         )
         card_layout.addWidget(self.progress)
         
         info_layout = QHBoxLayout()
         self.lbl_speed = QLabel("0 KB/s")
-        self.lbl_speed.setStyleSheet("font-weight: 600; color: #2563eb; font-size: 13px;")
+        self.lbl_speed.setStyleSheet("font-weight: 600; color: #3E6478; font-size: 13px;")
         
         self.lbl_eta = QLabel("ETA: --")
-        self.lbl_eta.setStyleSheet("font-weight: 600; color: #64748b; font-size: 13px;")
+        self.lbl_eta.setStyleSheet("font-weight: 600; color: #72808A; font-size: 13px;")
         
         info_layout.addWidget(self.lbl_speed)
         info_layout.addStretch()
@@ -85,8 +86,8 @@ class DownloadWidget(QWidget):
         self.btn_select_local.setFlat(True)
         self.btn_select_local.setCursor(Qt.PointingHandCursor)
         self.btn_select_local.setStyleSheet(
-            "QPushButton { color: #2563eb; font-size: 12px; font-weight: 500; border: none; background: transparent; padding: 4px; }"
-            "QPushButton:hover { text-decoration: underline; color: #1d4ed8; }"
+            "QPushButton { color: #3E6478; font-size: 12px; font-weight: 500; border: none; background: transparent; padding: 4px; }"
+            "QPushButton:hover { text-decoration: underline; color: #345668; }"
         )
         self.btn_select_local.clicked.connect(self._on_select_local_file)
         card_layout.addWidget(self.btn_select_local, alignment=Qt.AlignCenter)
@@ -107,13 +108,15 @@ class DownloadWidget(QWidget):
         self.btn_cancel.setFixedWidth(150)
         self.btn_cancel.setCursor(Qt.PointingHandCursor)
         self.btn_cancel.setStyleSheet(
-            "QPushButton { background-color: #f1f5f9; color: #1e293b; font-weight: 500; border: 1px solid #cbd5e1; border-radius: 4px; }"
-            "QPushButton:hover { background-color: #e2e8f0; }"
+            "QPushButton { background-color: #F1F4F6; color: #35434C; font-weight: 500; border: 1px solid #DDE4E8; border-radius: 8px; }"
+            "QPushButton:hover { background-color: #E6ECEF; }"
         )
         self.btn_cancel.clicked.connect(self._on_cancel)
         self.main_layout.addWidget(self.btn_cancel, alignment=Qt.AlignCenter)
 
     def start_download(self, config: PartyConfig):
+        self.timer.stop()
+        self._cleanup()
         self.config = config
         self.checked_disk = False
         self._stall_count = 0
@@ -159,17 +162,26 @@ class DownloadWidget(QWidget):
 
     def _find_existing_download(self):
         """Check if the media file was already downloaded in a previous session or is currently seeded."""
+        hint = os.path.basename(self.config.media.file.name_hint.strip())
+        if hint in (".", ".."):
+            hint = ""
         try:
             from torrent_creator import SeederManager
-            seeded_candidate = SeederManager.get_current_file()
+            query = urllib.parse.parse_qs(
+                urllib.parse.urlsplit(self.config.media.source.value).query
+            )
+            xt = query.get("xt", [""])[0]
+            info_hash = xt.partition(":")[-1].partition(":")[-1]
+            seeded_candidate = SeederManager.get_current_file(info_hash)
             if seeded_candidate and os.path.isfile(seeded_candidate):
-                hint = self.config.media.file.name_hint
                 if not hint or os.path.basename(seeded_candidate) == hint:
-                    return seeded_candidate
+                    expected_size = self.config.media.file.size
+                    if (expected_size is None or expected_size <= 0 or
+                            os.path.getsize(seeded_candidate) == expected_size):
+                        return seeded_candidate
         except Exception:
             pass
 
-        hint = self.config.media.file.name_hint
         if not hint:
             return None
         candidate = os.path.join(self.save_dir, hint)
@@ -177,7 +189,11 @@ class DownloadWidget(QWidget):
             return None
         expected_size = self.config.media.file.size
         if expected_size is not None and expected_size > 0:
-            actual_size = os.path.getsize(candidate)
+            try:
+                actual_size = os.path.getsize(candidate)
+            except OSError as e:
+                launcher_logger.info(f"Could not inspect existing download {candidate}: {e}")
+                return None
             if actual_size != expected_size:
                 launcher_logger.info(f"Existing file size mismatch: expected {expected_size}, got {actual_size}")
                 return None
@@ -205,21 +221,31 @@ class DownloadWidget(QWidget):
             self._show_error(msg)
             return
         except Exception as e:
-            launcher_logger.error(f"Unexpected poll error: {e}")
+            self._network_retry_count += 1
+            if self._network_retry_count <= 3:
+                launcher_logger.warning(
+                    f"Unexpected RPC poll failure (attempt {self._network_retry_count}): {e}"
+                )
+                return
+            self.timer.stop()
+            launcher_logger.error(f"RPC poll failed after retries: {e}")
+            self._show_error(errors.err_network_lost())
             return
             
         self._network_retry_count = 0
             
         total_length = int(status.get("totalLength", 0))
         if total_length > 0 and not self.checked_disk:
+            completed_for_space = int(status.get("completedLength", 0))
+            remaining_length = max(0, total_length - completed_for_space)
             try:
                 check_path = self.save_dir if os.path.exists(self.save_dir) else os.path.splitdrive(self.save_dir)[0] + os.sep
                 free_space = shutil.disk_usage(check_path).free
             except Exception:
                 free_space = 0
-            if free_space > 0 and total_length > free_space:
+            if free_space > 0 and remaining_length > free_space:
                 self.timer.stop()
-                msg = errors.err_disk_full(total_length / 1024**3, free_space / 1024**3)
+                msg = errors.err_disk_full(remaining_length / 1024**3, free_space / 1024**3)
                 self._show_error(msg, show_try_again=False)
                 self._cleanup()
                 return
@@ -351,6 +377,22 @@ class DownloadWidget(QWidget):
             msg = errors.err_media_file_missing()
             self._show_error(msg, show_try_again=False)
             return
+
+        expected_size = self.config.media.file.size
+        try:
+            actual_size = os.path.getsize(media_path)
+        except OSError:
+            msg = errors.err_media_file_missing()
+            self._show_error(msg, show_try_again=False)
+            return
+        if expected_size is not None and expected_size > 0 and actual_size != expected_size:
+            msg = errors.log_and_format(
+                "Downloaded media does not match the party details.",
+                f"Expected {expected_size} bytes but found {actual_size} bytes.",
+                "Ask the host to verify the selected media and create a new party invite."
+            )
+            self._show_error(msg, show_try_again=False)
+            return
             
         launcher_logger.info(f"Download complete: {media_path}")
         self._cleanup()
@@ -358,6 +400,7 @@ class DownloadWidget(QWidget):
 
     def _show_error(self, msg: str, show_try_again: bool = True):
         self.timer.stop()
+        self._cleanup()
         self.btn_cancel.hide()
         self.error_panel.show_error(msg, show_try_again=show_try_again)
         
@@ -386,6 +429,7 @@ class DownloadWidget(QWidget):
         if self.manager:
             self.manager.stop()
             self.manager = None
+        self.gid = None
 
     def _on_select_local_file(self):
         file_path, _ = QFileDialog.getOpenFileName(

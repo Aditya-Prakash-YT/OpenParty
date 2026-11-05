@@ -35,10 +35,14 @@ class TorrentWorker(QThread):
         super().__init__(parent)
         self.file_path = file_path
         self._seed_process = None  # aria2c Popen handle, kept alive
+        self.seed_status = ""
 
     def run(self):
         try:
             self.status_update.emit("Calculating hash and creating torrent...")
+            # This process manages a single host seed. Stop any prior seed so
+            # a newly generated invite cannot leave the old media being served.
+            SeederManager.stop_seeding()
             file_name = os.path.basename(self.file_path)
             file_size = os.path.getsize(self.file_path)
 
@@ -55,8 +59,11 @@ class TorrentWorker(QThread):
                 proc = seed_with_aria2c(torrent_path, data_dir, aria2c_exe)
                 if proc is not None:
                     self._seed_process = proc
-                    SeederManager.set_seed_process(proc, torrent_path, self.file_path)
+                    SeederManager.set_seed_process(
+                        proc, torrent_path, self.file_path, info_hash
+                    )
                     seeded = True
+                    self.seed_status = "Seeding with aria2c. Ready to share."
                     launcher_logger.info(f"Seeding via aria2c (pid {proc.pid})")
 
             # 2. Fallback: try qBittorrent Web API (if it happens to be running)
@@ -67,6 +74,7 @@ class TorrentWorker(QThread):
                     client.login()
                     client.add_torrent_for_seeding(torrent_path, data_dir)
                     seeded = True
+                    self.seed_status = "Seeding with qBittorrent. Ready to share."
                     launcher_logger.info("Seeding via qBittorrent Web API")
                 except Exception as e:
                     launcher_logger.info(f"qBittorrent Web API not available ({e})")
@@ -79,17 +87,21 @@ class TorrentWorker(QThread):
                         self.status_update.emit("Opening qBittorrent to seed...")
                         subprocess.Popen([qbit_exe, torrent_path])
                         seeded = True
+                        self.seed_status = (
+                            "Torrent opened in qBittorrent. Confirm its status shows Seeding."
+                        )
                         launcher_logger.info("Launched qBittorrent GUI with torrent file")
                     except Exception as e:
                         launcher_logger.warning(f"Failed to launch qBittorrent: {e}")
 
             if seeded:
-                self.status_update.emit("Torrent created and seeding.")
+                self.status_update.emit(self.seed_status)
             else:
-                self.status_update.emit(
-                    "Torrent and magnet link created (not seeding -- "
-                    "install aria2c via setup.cmd to enable seeding)."
+                self.seed_status = (
+                    "Torrent and magnet link created, but seeding could not be started. "
+                    "Guests will not be able to download until a seeder is online."
                 )
+                self.status_update.emit(self.seed_status)
 
             self.finished_ok.emit(magnet, file_name, file_size, torrent_path)
 

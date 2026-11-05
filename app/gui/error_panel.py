@@ -32,9 +32,9 @@ class ErrorPanel(QWidget):
         
         self.lbl_error = QLabel("")
         self.lbl_error.setStyleSheet(
-            "background-color: #fef2f2; border: 1px solid #fca5a5; "
-            "border-radius: 4px; padding: 14px; font-size: 13px; "
-            "color: #991b1b; font-family: 'Segoe UI', sans-serif;"
+            "background-color: #FAF1F1; border: 1px solid #E8C9C9; "
+            "border-radius: 8px; padding: 14px; font-size: 13px; "
+            "color: #884949; font-family: 'Segoe UI', sans-serif;"
         )
         self.lbl_error.setWordWrap(True)
         self.lbl_error.setTextFormat(Qt.PlainText)

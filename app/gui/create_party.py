@@ -33,8 +33,8 @@ class CreatePartyWidget(QWidget):
 
     def _setup_ui(self):
         self.main_layout = QVBoxLayout(self)
-        self.main_layout.setContentsMargins(24, 20, 24, 20)
-        self.main_layout.setSpacing(12)
+        self.main_layout.setContentsMargins(28, 24, 28, 24)
+        self.main_layout.setSpacing(16)
         
         # Header
         header_layout = QHBoxLayout()
@@ -45,9 +45,9 @@ class CreatePartyWidget(QWidget):
         
         title_box = QVBoxLayout()
         title = QLabel("Create Watch Party")
-        title.setStyleSheet("font-size: 20px; font-weight: 600; color: #0f172a;")
+        title.setStyleSheet("font-size: 20px; font-weight: 600; color: #25323B;")
         subtitle = QLabel("Configure a movie session and generate an invite for your guests.")
-        subtitle.setStyleSheet("font-size: 13px; color: #475569;")
+        subtitle.setStyleSheet("font-size: 13px; color: #65747E;")
         title_box.addWidget(title)
         title_box.addWidget(subtitle)
         
@@ -69,14 +69,14 @@ class CreatePartyWidget(QWidget):
         # 1. Media Source Card
         source_frame = QFrame()
         source_frame.setStyleSheet(
-            "QFrame { background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px; }"
+            "QFrame { background-color: #F8FAFB; border: 1px solid #E6ECEF; border-radius: 9px; padding: 12px; }"
             "QLabel { background: transparent; border: none; }"
         )
         source_layout = QVBoxLayout(source_frame)
         source_layout.setSpacing(10)
         
         lbl_source_title = QLabel("1. Select Media")
-        lbl_source_title.setStyleSheet("font-size: 14px; font-weight: 600; color: #1e293b;")
+        lbl_source_title.setStyleSheet("font-size: 14px; font-weight: 600; color: #35434C;")
         source_layout.addWidget(lbl_source_title)
         
         # Radio toggle: File vs Magnet
@@ -106,11 +106,11 @@ class CreatePartyWidget(QWidget):
         self.btn_choose_file.setMinimumHeight(36)
         self.btn_choose_file.setCursor(Qt.PointingHandCursor)
         self.btn_choose_file.setStyleSheet(
-            "QPushButton { background-color: #2563eb; color: white; font-weight: 600; border-radius: 4px; padding: 6px 14px; border: none; }"
-            "QPushButton:hover { background-color: #1d4ed8; }"
+            "QPushButton { background-color: #3E6478; color: white; font-weight: 600; border-radius: 8px; padding: 6px 14px; border: none; }"
+            "QPushButton:hover { background-color: #345668; }"
         )
         self.lbl_selected_file = QLabel("No file selected.")
-        self.lbl_selected_file.setStyleSheet("color: #64748b; font-size: 13px;")
+        self.lbl_selected_file.setStyleSheet("color: #72808A; font-size: 13px;")
         self.lbl_selected_file.setWordWrap(True)
         
         file_sec_layout.addWidget(self.btn_choose_file)
@@ -119,7 +119,7 @@ class CreatePartyWidget(QWidget):
         
         # Torrent Status Label
         self.lbl_torrent_status = QLabel("")
-        self.lbl_torrent_status.setStyleSheet("font-size: 12px; color: #15803d; font-weight: 500;")
+        self.lbl_torrent_status.setStyleSheet("font-size: 12px; color: #365F50; font-weight: 500;")
         self.lbl_torrent_status.setWordWrap(True)
         self.lbl_torrent_status.hide()
         source_layout.addWidget(self.lbl_torrent_status)
@@ -142,14 +142,14 @@ class CreatePartyWidget(QWidget):
         # 2. Party Details Card
         details_frame = QFrame()
         details_frame.setStyleSheet(
-            "QFrame { background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px; }"
+            "QFrame { background-color: #FFFFFF; border: 1px solid #E6ECEF; border-radius: 9px; padding: 12px; }"
             "QLabel { background: transparent; border: none; }"
         )
         details_layout = QVBoxLayout(details_frame)
         details_layout.setSpacing(10)
         
         lbl_details_sec = QLabel("2. Party Information")
-        lbl_details_sec.setStyleSheet("font-size: 14px; font-weight: 600; color: #1e293b;")
+        lbl_details_sec.setStyleSheet("font-size: 14px; font-weight: 600; color: #35434C;")
         details_layout.addWidget(lbl_details_sec)
         
         form_layout = QFormLayout()
@@ -173,7 +173,7 @@ class CreatePartyWidget(QWidget):
         self.adv_group.setCheckable(True)
         self.adv_group.setChecked(False)
         self.adv_group.setStyleSheet(
-            "QGroupBox { font-weight: 600; color: #475569; border: 1px solid #cbd5e1; border-radius: 6px; margin-top: 10px; padding-top: 14px; }"
+            "QGroupBox { font-weight: 600; color: #65747E; border: 1px solid #DDE4E8; border-radius: 9px; margin-top: 10px; padding-top: 14px; }"
             "QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 4px; }"
         )
         
@@ -222,7 +222,7 @@ class CreatePartyWidget(QWidget):
         
         # Validation / Note message
         self.lbl_note = QLabel("")
-        self.lbl_note.setStyleSheet("font-size: 12px; color: #475569;")
+        self.lbl_note.setStyleSheet("font-size: 12px; color: #65747E;")
         self.lbl_note.setWordWrap(True)
         self.main_layout.addWidget(self.lbl_note)
         
@@ -234,9 +234,9 @@ class CreatePartyWidget(QWidget):
         self.btn_start_party.setMinimumHeight(40)
         self.btn_start_party.setCursor(Qt.PointingHandCursor)
         self.btn_start_party.setStyleSheet(
-            "QPushButton { background-color: #2563eb; color: white; font-size: 14px; font-weight: 600; border-radius: 4px; border: none; padding: 6px 16px; }"
-            "QPushButton:hover { background-color: #1d4ed8; }"
-            "QPushButton:disabled { background-color: #94a3b8; }"
+            "QPushButton { background-color: #3E6478; color: white; font-size: 14px; font-weight: 600; border-radius: 8px; border: none; padding: 6px 16px; }"
+            "QPushButton:hover { background-color: #345668; }"
+            "QPushButton:disabled { background-color: #98A4AA; }"
         )
         
         self.btn_export = QPushButton("Save Party File (.oparty)")
@@ -244,9 +244,9 @@ class CreatePartyWidget(QWidget):
         self.btn_export.setMinimumHeight(40)
         self.btn_export.setCursor(Qt.PointingHandCursor)
         self.btn_export.setStyleSheet(
-            "QPushButton { background-color: #16a34a; color: white; font-size: 14px; font-weight: 600; border-radius: 4px; border: none; padding: 6px 14px; }"
-            "QPushButton:hover { background-color: #15803d; }"
-            "QPushButton:disabled { background-color: #94a3b8; }"
+            "QPushButton { background-color: #FFFFFF; color: #35434C; font-size: 14px; font-weight: 600; border-radius: 8px; border: 1px solid #D7E0E4; padding: 6px 14px; }"
+            "QPushButton:hover { background-color: #F1F4F6; border-color: #BCC9D0; }"
+            "QPushButton:disabled { background-color: #98A4AA; }"
         )
         
         self.btn_copy = QPushButton("Copy to Clipboard")
@@ -254,9 +254,9 @@ class CreatePartyWidget(QWidget):
         self.btn_copy.setMinimumHeight(40)
         self.btn_copy.setCursor(Qt.PointingHandCursor)
         self.btn_copy.setStyleSheet(
-            "QPushButton { background-color: #f1f5f9; color: #1e293b; font-size: 13px; font-weight: 500; border: 1px solid #cbd5e1; border-radius: 4px; padding: 6px 14px; }"
-            "QPushButton:hover { background-color: #e2e8f0; }"
-            "QPushButton:disabled { background-color: #f8fafc; color: #94a3b8; }"
+            "QPushButton { background-color: #F1F4F6; color: #35434C; font-size: 13px; font-weight: 500; border: 1px solid #DDE4E8; border-radius: 8px; padding: 6px 14px; }"
+            "QPushButton:hover { background-color: #E6ECEF; }"
+            "QPushButton:disabled { background-color: #F8FAFB; color: #98A4AA; }"
         )
         
         actions_layout.addWidget(self.btn_start_party, 2)
@@ -303,6 +303,13 @@ class CreatePartyWidget(QWidget):
             return
 
         self._local_file_path = file_path
+        # Clear metadata from a previously selected file before starting the
+        # background hash. If this selection fails, the old magnet must not
+        # remain available paired with the newly selected local path.
+        self.source_value_input.clear()
+        self.name_hint_input.clear()
+        self.size_input.clear()
+        self._created_torrent_path = None
         file_name = os.path.basename(file_path)
         self.lbl_selected_file.setText(f"Selected: <b>{file_name}</b>")
         
@@ -312,7 +319,9 @@ class CreatePartyWidget(QWidget):
             
         self.btn_choose_file.setEnabled(False)
         self.btn_choose_file.setText("Preparing Torrent...")
-        self.lbl_torrent_status.setStyleSheet("font-size: 12px; color: #475569;")
+        self.radio_file.setEnabled(False)
+        self.radio_magnet.setEnabled(False)
+        self.lbl_torrent_status.setStyleSheet("font-size: 12px; color: #65747E;")
         self.lbl_torrent_status.setText("Hashing file and generating torrent...")
         self.lbl_torrent_status.show()
 
@@ -334,15 +343,27 @@ class CreatePartyWidget(QWidget):
 
         self.btn_choose_file.setEnabled(True)
         self.btn_choose_file.setText("Change Video File...")
-        self.lbl_torrent_status.setStyleSheet("font-size: 12px; color: #15803d; font-weight: 500;")
-        self.lbl_torrent_status.setText("Media prepared successfully. Ready to share.")
+        self.radio_file.setEnabled(True)
+        self.radio_magnet.setEnabled(True)
+        seed_status = getattr(self._torrent_worker, "seed_status", "")
+        if "could not be started" in seed_status:
+            self.lbl_torrent_status.setStyleSheet("font-size: 12px; color: #A85D5D; font-weight: 500;")
+            self.lbl_torrent_status.setText(seed_status)
+        elif "Confirm its status" in seed_status:
+            self.lbl_torrent_status.setStyleSheet("font-size: 12px; color: #725839; font-weight: 500;")
+            self.lbl_torrent_status.setText(seed_status)
+        else:
+            self.lbl_torrent_status.setStyleSheet("font-size: 12px; color: #365F50; font-weight: 500;")
+            self.lbl_torrent_status.setText(seed_status or "Media prepared successfully. Ready to share.")
         self.lbl_torrent_status.show()
         self._validate_live()
 
     def _on_torrent_err(self, err_msg: str):
         self.btn_choose_file.setEnabled(True)
         self.btn_choose_file.setText("Browse Video File...")
-        self.lbl_torrent_status.setStyleSheet("font-size: 12px; color: #dc2626;")
+        self.radio_file.setEnabled(True)
+        self.radio_magnet.setEnabled(True)
+        self.lbl_torrent_status.setStyleSheet("font-size: 12px; color: #A85D5D;")
         self.lbl_torrent_status.setText(f"Error: {err_msg}")
         self.lbl_torrent_status.show()
         self._validate_live()
@@ -417,7 +438,7 @@ class CreatePartyWidget(QWidget):
 
         if not party_name:
             self.lbl_note.setText("Please enter a party name.")
-            self.lbl_note.setStyleSheet("font-size: 12px; color: #64748b;")
+            self.lbl_note.setStyleSheet("font-size: 12px; color: #72808A;")
             self.btn_start_party.setEnabled(False)
             self.btn_export.setEnabled(False)
             self.btn_copy.setEnabled(False)
@@ -428,7 +449,7 @@ class CreatePartyWidget(QWidget):
                 self.lbl_note.setText("Please select a video file.")
             else:
                 self.lbl_note.setText("Please enter a magnet link.")
-            self.lbl_note.setStyleSheet("font-size: 12px; color: #64748b;")
+            self.lbl_note.setStyleSheet("font-size: 12px; color: #72808A;")
             self.btn_start_party.setEnabled(False)
             self.btn_export.setEnabled(False)
             self.btn_copy.setEnabled(False)
@@ -438,13 +459,13 @@ class CreatePartyWidget(QWidget):
         try:
             load_party_string(raw_json)
             self.lbl_note.setText("Configuration valid. Ready to export or start party.")
-            self.lbl_note.setStyleSheet("font-size: 12px; color: #15803d; font-weight: 500;")
+            self.lbl_note.setStyleSheet("font-size: 12px; color: #365F50; font-weight: 500;")
             self.btn_start_party.setEnabled(True)
             self.btn_export.setEnabled(True)
             self.btn_copy.setEnabled(True)
         except PartyFileError as e:
             self.lbl_note.setText(f"Validation note: {str(e)}")
-            self.lbl_note.setStyleSheet("font-size: 12px; color: #dc2626;")
+            self.lbl_note.setStyleSheet("font-size: 12px; color: #A85D5D;")
             self.btn_start_party.setEnabled(False)
             self.btn_export.setEnabled(False)
             self.btn_copy.setEnabled(False)

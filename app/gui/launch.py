@@ -52,18 +52,18 @@ class LaunchWidget(QWidget):
 
     def _setup_ui(self):
         self.main_layout = QVBoxLayout(self)
-        self.main_layout.setContentsMargins(24, 24, 24, 24)
-        self.main_layout.setSpacing(16)
+        self.main_layout.setContentsMargins(32, 30, 32, 28)
+        self.main_layout.setSpacing(20)
         
         self.lbl_title = QLabel("Starting Watch Party...")
-        self.lbl_title.setStyleSheet("font-size: 20px; font-weight: 600; color: #0f172a;")
+        self.lbl_title.setStyleSheet("font-size: 20px; font-weight: 600; color: #25323B;")
         self.lbl_title.setAlignment(Qt.AlignCenter)
         self.main_layout.addWidget(self.lbl_title)
         
         # Checklist Card
         self.card = QFrame()
         self.card.setStyleSheet(
-            "QFrame { background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 18px; }"
+            "QFrame { background-color: #FFFFFF; border: 1px solid #E1E7EA; border-radius: 12px; padding: 22px; }"
             "QLabel { background: transparent; border: none; }"
         )
         self.card_layout = QVBoxLayout(self.card)
@@ -75,7 +75,7 @@ class LaunchWidget(QWidget):
         
         # Status completion message
         self.lbl_success = QLabel("VLC and Syncplay are synchronized with your party.\nYou may minimize OpenParty or return to the main menu.")
-        self.lbl_success.setStyleSheet("font-size: 13px; font-weight: 500; color: #15803d; padding-top: 6px;")
+        self.lbl_success.setStyleSheet("font-size: 13px; font-weight: 500; color: #365F50; padding-top: 6px;")
         self.lbl_success.setAlignment(Qt.AlignCenter)
         self.lbl_success.setWordWrap(True)
         self.lbl_success.hide()
@@ -98,8 +98,8 @@ class LaunchWidget(QWidget):
         self.btn_minimize.setMinimumHeight(38)
         self.btn_minimize.setCursor(Qt.PointingHandCursor)
         self.btn_minimize.setStyleSheet(
-            "QPushButton { background-color: #2563eb; color: white; font-weight: 600; border-radius: 4px; padding: 6px 16px; border: none; }"
-            "QPushButton:hover { background-color: #1d4ed8; }"
+            "QPushButton { background-color: #3E6478; color: white; font-weight: 600; border-radius: 8px; padding: 6px 16px; border: none; }"
+            "QPushButton:hover { background-color: #345668; }"
         )
         self.btn_minimize.clicked.connect(self._on_minimize)
         self.btn_minimize.hide()
@@ -109,8 +109,8 @@ class LaunchWidget(QWidget):
         self.btn_back.setMinimumHeight(38)
         self.btn_back.setCursor(Qt.PointingHandCursor)
         self.btn_back.setStyleSheet(
-            "QPushButton { background-color: #f1f5f9; color: #1e293b; font-weight: 500; border: 1px solid #cbd5e1; border-radius: 4px; padding: 6px 16px; }"
-            "QPushButton:hover { background-color: #e2e8f0; }"
+            "QPushButton { background-color: #F1F4F6; color: #35434C; font-weight: 500; border: 1px solid #DDE4E8; border-radius: 8px; padding: 6px 16px; }"
+            "QPushButton:hover { background-color: #E6ECEF; }"
         )
         self.btn_back.clicked.connect(self._on_back)
         self.btn_back.hide()
@@ -150,7 +150,7 @@ class LaunchWidget(QWidget):
         self.step_labels = []
         for text, _ in self.steps:
             lbl = QLabel(f"[  ] {text}")
-            lbl.setStyleSheet("font-size: 13px; color: #64748b; font-family: Consolas, monospace;")
+            lbl.setStyleSheet("font-size: 13px; color: #72808A; font-family: Consolas, monospace;")
             self.check_layout.addWidget(lbl)
             self.step_labels.append(lbl)
             
@@ -161,13 +161,13 @@ class LaunchWidget(QWidget):
             prev_lbl = self.step_labels[self.current_step - 1]
             prev_text = self.steps[self.current_step - 1][0]
             prev_lbl.setText(f"[OK] {prev_text}")
-            prev_lbl.setStyleSheet("font-size: 13px; color: #15803d; font-weight: 600; font-family: Consolas, monospace;")
+            prev_lbl.setStyleSheet("font-size: 13px; color: #365F50; font-weight: 600; font-family: Consolas, monospace;")
             
         if self.current_step < len(self.steps):
             curr_lbl = self.step_labels[self.current_step]
             curr_text = self.steps[self.current_step][0]
             curr_lbl.setText(f"[..] {curr_text}...")
-            curr_lbl.setStyleSheet("font-size: 13px; color: #0f172a; font-weight: 600; font-family: Consolas, monospace;")
+            curr_lbl.setStyleSheet("font-size: 13px; color: #25323B; font-weight: 600; font-family: Consolas, monospace;")
             
             func = self.steps[self.current_step][1]
             result = func()
@@ -179,7 +179,7 @@ class LaunchWidget(QWidget):
             if not result:
                 self.step_timer.stop()
                 curr_lbl.setText(f"[Failed] {curr_text}")
-                curr_lbl.setStyleSheet("font-size: 13px; color: #dc2626; font-weight: 600; font-family: Consolas, monospace;")
+                curr_lbl.setStyleSheet("font-size: 13px; color: #A85D5D; font-weight: 600; font-family: Consolas, monospace;")
                 return
                 
             self.current_step += 1
@@ -195,7 +195,7 @@ class LaunchWidget(QWidget):
             curr_lbl = self.step_labels[self.current_step]
             curr_text = self.steps[self.current_step][0]
             curr_lbl.setText(f"[Failed] {curr_text}")
-            curr_lbl.setStyleSheet("font-size: 13px; color: #dc2626; font-weight: 600; font-family: Consolas, monospace;")
+            curr_lbl.setStyleSheet("font-size: 13px; color: #A85D5D; font-weight: 600; font-family: Consolas, monospace;")
             return
         self.current_step += 1
         self.step_timer.start(800)
@@ -208,9 +208,28 @@ class LaunchWidget(QWidget):
             
         expected_size = self.config.media.file.size
         if expected_size is not None and expected_size > 0:
-            actual_size = os.path.getsize(self.media_path)
+            try:
+                actual_size = os.path.getsize(self.media_path)
+            except OSError as e:
+                msg = errors.log_and_format(
+                    "Could not inspect the selected media file.",
+                    str(e),
+                    "Check that the file is accessible, then select it again.",
+                    exc=e
+                )
+                self.error_panel.show_error(msg, show_try_again=False)
+                return False
             if actual_size != expected_size:
-                launcher_logger.warning(f"Size mismatch: expected {expected_size}, got {actual_size}")
+                launcher_logger.error(
+                    f"Media size mismatch: expected {expected_size}, got {actual_size}"
+                )
+                msg = errors.log_and_format(
+                    "The selected media does not match the party details.",
+                    f"Expected {expected_size} bytes but found {actual_size} bytes.",
+                    "Select the original media file and create a new party invite."
+                )
+                self.error_panel.show_error(msg, show_try_again=False)
+                return False
                 
         expected_hash = self.config.integrity.sha256
         if expected_hash and expected_hash.strip():
@@ -233,8 +252,13 @@ class LaunchWidget(QWidget):
 
     def _on_hash_error(self, err_msg: str):
         launcher_logger.error(f"Hash computation failed: {err_msg}")
-        launcher_logger.warning("Skipping integrity check due to hash error")
-        self._resume_after_async(True)
+        msg = errors.log_and_format(
+            "Could not verify media integrity.",
+            err_msg,
+            "Check that the file is readable, then select it again."
+        )
+        self.error_panel.show_error(msg, show_try_again=False)
+        self._resume_after_async(False)
 
     def _step_launch(self) -> bool:
         vlc_exe = find_vlc()
@@ -300,7 +324,7 @@ class LaunchWidget(QWidget):
                 curr_lbl = self.step_labels[self.current_step]
                 curr_text = self.steps[self.current_step][0]
                 curr_lbl.setText(f"[Failed] {curr_text}")
-                curr_lbl.setStyleSheet("font-size: 13px; color: #dc2626; font-weight: 600; font-family: Consolas, monospace;")
+                curr_lbl.setStyleSheet("font-size: 13px; color: #A85D5D; font-weight: 600; font-family: Consolas, monospace;")
             self.step_timer.stop()
 
     def _step_wait(self) -> bool:

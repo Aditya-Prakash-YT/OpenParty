@@ -20,8 +20,8 @@ class JoinPartyWidget(QWidget):
 
     def _setup_ui(self):
         self.main_layout = QVBoxLayout(self)
-        self.main_layout.setContentsMargins(24, 20, 24, 20)
-        self.main_layout.setSpacing(14)
+        self.main_layout.setContentsMargins(28, 24, 28, 24)
+        self.main_layout.setSpacing(18)
         
         # Header
         header_layout = QHBoxLayout()
@@ -32,9 +32,9 @@ class JoinPartyWidget(QWidget):
         
         title_box = QVBoxLayout()
         title = QLabel("Join Watch Party")
-        title.setStyleSheet("font-size: 20px; font-weight: 600; color: #0f172a;")
+        title.setStyleSheet("font-size: 20px; font-weight: 600; color: #25323B;")
         subtitle = QLabel("Open a party configuration file or paste invite data from a host.")
-        subtitle.setStyleSheet("font-size: 13px; color: #475569;")
+        subtitle.setStyleSheet("font-size: 13px; color: #65747E;")
         title_box.addWidget(title)
         title_box.addWidget(subtitle)
         
@@ -47,14 +47,14 @@ class JoinPartyWidget(QWidget):
         # Input Section (Drag & Drop Zone + Buttons)
         self.input_frame = QFrame()
         self.input_frame.setStyleSheet(
-            "QFrame { border: 2px dashed #cbd5e1; border-radius: 6px; background-color: #f8fafc; padding: 18px; }"
+            "QFrame { border: 1px dashed #C8D2D8; border-radius: 10px; background-color: #F8FAFB; padding: 20px; }"
         )
         input_layout = QVBoxLayout(self.input_frame)
         input_layout.setSpacing(12)
         
         lbl_drag = QLabel("Drag and drop an .oparty file here, or choose an option below:")
         lbl_drag.setAlignment(Qt.AlignCenter)
-        lbl_drag.setStyleSheet("font-size: 13px; font-weight: 500; color: #475569; border: none; background: transparent;")
+        lbl_drag.setStyleSheet("font-size: 13px; font-weight: 500; color: #65747E; border: none; background: transparent;")
         input_layout.addWidget(lbl_drag)
         
         btn_row = QHBoxLayout()
@@ -63,8 +63,8 @@ class JoinPartyWidget(QWidget):
         self.btn_open_file.setMinimumHeight(36)
         self.btn_open_file.setCursor(Qt.PointingHandCursor)
         self.btn_open_file.setStyleSheet(
-            "QPushButton { background-color: #2563eb; color: white; font-weight: 600; border-radius: 4px; padding: 6px 16px; border: none; }"
-            "QPushButton:hover { background-color: #1d4ed8; }"
+            "QPushButton { background-color: #3E6478; color: white; font-weight: 600; border-radius: 8px; padding: 6px 16px; border: none; }"
+            "QPushButton:hover { background-color: #345668; }"
         )
         
         self.btn_paste_clipboard = QPushButton("Paste from Clipboard")
@@ -72,8 +72,8 @@ class JoinPartyWidget(QWidget):
         self.btn_paste_clipboard.setMinimumHeight(36)
         self.btn_paste_clipboard.setCursor(Qt.PointingHandCursor)
         self.btn_paste_clipboard.setStyleSheet(
-            "QPushButton { background-color: #ffffff; color: #1e293b; font-weight: 500; border: 1px solid #cbd5e1; border-radius: 4px; padding: 6px 16px; }"
-            "QPushButton:hover { background-color: #f1f5f9; }"
+            "QPushButton { background-color: #FFFFFF; color: #35434C; font-weight: 500; border: 1px solid #DDE4E8; border-radius: 8px; padding: 6px 16px; }"
+            "QPushButton:hover { background-color: #F1F4F6; }"
         )
         btn_row.addWidget(self.btn_open_file)
         btn_row.addWidget(self.btn_paste_clipboard)
@@ -83,13 +83,13 @@ class JoinPartyWidget(QWidget):
         self.btn_toggle_text = QPushButton("Enter party data manually...")
         self.btn_toggle_text.setFlat(True)
         self.btn_toggle_text.setCursor(Qt.PointingHandCursor)
-        self.btn_toggle_text.setStyleSheet("color: #64748b; font-size: 12px; border: none; background: transparent;")
+        self.btn_toggle_text.setStyleSheet("color: #72808A; font-size: 12px; border: none; background: transparent;")
         input_layout.addWidget(self.btn_toggle_text, alignment=Qt.AlignCenter)
         
         self.text_paste = QTextEdit()
         self.text_paste.setPlaceholderText("Paste party JSON or invite code here...")
         self.text_paste.setMaximumHeight(90)
-        self.text_paste.setStyleSheet("border: 1px solid #cbd5e1; border-radius: 4px; background-color: white; font-family: Consolas, monospace;")
+        self.text_paste.setStyleSheet("border: 1px solid #DDE4E8; border-radius: 8px; background-color: white; font-family: Consolas, monospace;")
         self.text_paste.hide()
         input_layout.addWidget(self.text_paste)
         
@@ -103,7 +103,7 @@ class JoinPartyWidget(QWidget):
         # Error Label
         self.lbl_error = QLabel("")
         self.lbl_error.setStyleSheet(
-            "color: #991b1b; background-color: #fef2f2; border: 1px solid #fca5a5; border-radius: 4px; padding: 10px; font-size: 13px;"
+            "color: #884949; background-color: #FAF1F1; border: 1px solid #E8C9C9; border-radius: 8px; padding: 10px; font-size: 13px;"
         )
         self.lbl_error.setWordWrap(True)
         self.lbl_error.hide()
@@ -112,7 +112,7 @@ class JoinPartyWidget(QWidget):
         # Details Panel (Party Summary Card)
         self.details_frame = QFrame()
         self.details_frame.setStyleSheet(
-            "QFrame { background-color: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 14px; }"
+            "QFrame { background-color: #F8FAFB; border: 1px solid #DDE4E8; border-radius: 9px; padding: 14px; }"
             "QLabel { background-color: transparent; border: none; }"
         )
         details_layout = QVBoxLayout(self.details_frame)
@@ -120,7 +120,7 @@ class JoinPartyWidget(QWidget):
         
         card_header = QHBoxLayout()
         self.lbl_details_title = QLabel("Party Details")
-        self.lbl_details_title.setStyleSheet("font-weight: 600; font-size: 15px; color: #0f172a;")
+        self.lbl_details_title.setStyleSheet("font-weight: 600; font-size: 15px; color: #25323B;")
         card_header.addWidget(self.lbl_details_title)
         card_header.addStretch()
         details_layout.addLayout(card_header)
@@ -136,7 +136,7 @@ class JoinPartyWidget(QWidget):
         
         for lbl in (self.val_name, self.val_host, self.val_media, self.val_room, self.val_server):
             lbl.setTextInteractionFlags(Qt.TextSelectableByMouse)
-            lbl.setStyleSheet("font-weight: 500; color: #1e293b; font-size: 13px;")
+            lbl.setStyleSheet("font-weight: 500; color: #35434C; font-size: 13px;")
         
         self.form_details.addRow("Party Name:", self.val_name)
         self.form_details.addRow("Host:", self.val_host)
@@ -151,8 +151,8 @@ class JoinPartyWidget(QWidget):
         self.btn_start.setMinimumHeight(42)
         self.btn_start.setCursor(Qt.PointingHandCursor)
         self.btn_start.setStyleSheet(
-            "QPushButton { background-color: #16a34a; color: white; font-size: 14px; font-weight: 600; border-radius: 4px; border: none; }"
-            "QPushButton:hover { background-color: #15803d; }"
+            "QPushButton { background-color: #3E6478; color: white; font-size: 14px; font-weight: 600; border-radius: 8px; border: none; }"
+            "QPushButton:hover { background-color: #345668; }"
         )
         details_layout.addWidget(self.btn_start)
         
