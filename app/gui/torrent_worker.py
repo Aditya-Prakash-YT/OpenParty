@@ -1,6 +1,6 @@
 """
 TorrentWorker -- Background worker that creates a torrent in pure Python,
-seeds it via aria2c (primary) or qBittorrent (fallback), and yields the magnet link.
+seeds it via aria2c (primary) or opens qBittorrent's GUI as a manual fallback.
 """
 
 import os
@@ -11,8 +11,6 @@ from torrent_creator import (
     create_local_torrent,
     seed_with_aria2c,
     SeederManager,
-    QBitClient,
-    QBitError,
 )
 from deps import find_aria2c, find_qbittorrent
 from logger import launcher_logger
@@ -66,20 +64,8 @@ class TorrentWorker(QThread):
                     self.seed_status = "Seeding with aria2c. Ready to share."
                     launcher_logger.info(f"Seeding via aria2c (pid {proc.pid})")
 
-            # 2. Fallback: try qBittorrent Web API (if it happens to be running)
-            if not seeded:
-                try:
-                    self.status_update.emit("Trying qBittorrent Web API...")
-                    client = QBitClient()
-                    client.login()
-                    client.add_torrent_for_seeding(torrent_path, data_dir)
-                    seeded = True
-                    self.seed_status = "Seeding with qBittorrent. Ready to share."
-                    launcher_logger.info("Seeding via qBittorrent Web API")
-                except Exception as e:
-                    launcher_logger.info(f"qBittorrent Web API not available ({e})")
-
-            # 3. Last resort: open qBittorrent GUI with the torrent file
+            # Fallback: open qBittorrent's GUI. OpenParty does not guess or store
+            # Web API credentials and never weakens qBittorrent's authentication.
             if not seeded:
                 qbit_exe = find_qbittorrent()
                 if qbit_exe:

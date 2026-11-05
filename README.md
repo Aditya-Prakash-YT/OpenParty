@@ -186,13 +186,11 @@ OpenParty automatically checks whether required software already exists.
 
 This includes:
 
-* Python 3.12+ and required packages
 * VLC
 * Syncplay
 * aria2c
-* qBittorrent
 
-Installing this software happens once, through a separate one-time setup step—the everyday app never installs anything itself. If something is missing, OpenParty clearly says so and points back to that one-time setup, then continues normally once it's done.
+Installing VLC, Syncplay, aria2c, and the Syncplay Visual C++ runtime happens once through setup.cmd. The packaged app does not need Python or qBittorrent and does not install software itself.
 
 ---
 

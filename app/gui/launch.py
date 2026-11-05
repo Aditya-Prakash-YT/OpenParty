@@ -243,7 +243,7 @@ class LaunchWidget(QWidget):
         return True
 
     def _on_hash_done(self, digest: str):
-        if digest != self._expected_hash:
+        if digest.lower() != self._expected_hash.lower():
             msg = errors.err_integrity_failed()
             self.error_panel.show_error(msg, show_try_again=False)
             self._resume_after_async(False)
@@ -294,7 +294,14 @@ class LaunchWidget(QWidget):
             log_path = os.path.join(log_dir, "syncplay.log")
             
             self.log_file = open(log_path, "a", encoding="utf-8")
-            self.log_file.write(f"\n--- Launching Syncplay ({time.ctime()}) ---\nCmd: {cmd}\n")
+            safe_cmd = list(cmd)
+            if "--password" in safe_cmd:
+                password_index = safe_cmd.index("--password") + 1
+                if password_index < len(safe_cmd):
+                    safe_cmd[password_index] = "<redacted>"
+            self.log_file.write(
+                f"\n--- Launching Syncplay ({time.ctime()}) ---\nCmd: {safe_cmd}\n"
+            )
             self.log_file.flush()
             
             CREATE_NO_WINDOW = 0x08000000

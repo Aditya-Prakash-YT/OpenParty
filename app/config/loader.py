@@ -9,6 +9,7 @@ PartyFileError with a single human-readable reason on failure.
 import json
 import re
 import os
+import ipaddress
 import urllib.parse
 from dataclasses import dataclass, field
 from typing import List, Optional
@@ -18,6 +19,7 @@ APP_VERSION = "1.0.0"
 
 # Supported schema versions this loader can handle.
 SUPPORTED_SCHEMA_VERSIONS = {1, 2}
+MAX_PARTY_FILE_BYTES = 1024 * 1024
 
 
 # ---------------------------------------------------------------------------
@@ -185,6 +187,20 @@ def _optional_section(data: dict, key: str) -> dict:
     return section
 
 
+def _reject_duplicate_json_keys(pairs):
+    """Reject ambiguous JSON objects instead of silently accepting the last key."""
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"Duplicate JSON key: {key}")
+        result[key] = value
+    return result
+
+
+def _reject_json_constant(value: str):
+    raise ValueError(f"Unsupported JSON constant: {value}")
+
+
 # ---------------------------------------------------------------------------
 # Section validators
 # ---------------------------------------------------------------------------
@@ -226,6 +242,8 @@ def _validate_media_source(source_data: dict) -> MediaSource:
     value = _require_string(source_data, "value", "media.source")
 
     if source_type == "magnet":
+        if len(value) > 16384:
+            raise PartyFileError("The magnet link is too long (maximum 16 KB).")
         try:
             parsed = urllib.parse.urlsplit(value)
             query = urllib.parse.parse_qs(parsed.query, keep_blank_values=True)
@@ -238,6 +256,25 @@ def _validate_media_source(source_data: dict) -> MediaSource:
                 "The media source type is 'magnet', but the value is missing a "
                 "magnet topic (xt) parameter."
             )
+        for tracker in query.get("tr", []):
+            try:
+                tracker_url = urllib.parse.urlsplit(tracker)
+                host = (tracker_url.hostname or "").rstrip(".").lower()
+                port = tracker_url.port
+            except ValueError as e:
+                raise PartyFileError("The magnet link contains an invalid tracker URL.") from e
+            try:
+                ip_address = ipaddress.ip_address(host) if host else None
+            except ValueError:
+                ip_address = None
+            if (len(tracker) > 2048 or tracker_url.scheme.lower() not in {"udp", "http", "https"}
+                    or not host or tracker_url.username or tracker_url.password
+                    or host == "localhost" or host.endswith((".localhost", ".local", ".internal", ".home.arpa"))
+                    or (ip_address is not None and not ip_address.is_global)
+                    or (port is not None and not 1 <= port <= 65535)):
+                raise PartyFileError(
+                    "The magnet link contains a tracker that is not a valid public UDP or HTTP(S) URL."
+                )
     elif source_type == "torrent-file":
         raise PartyFileError(
             "Local torrent files are no longer supported. Please use a magnet link."
@@ -371,10 +408,15 @@ def load_party_file(path: str) -> PartyConfig:
         raise PartyFileError(f"Party file not found: {path}")
 
     try:
-        with open(path, "r", encoding="utf-8") as f:
-            raw = f.read()
+        with open(path, "rb") as f:
+            raw_bytes = f.read(MAX_PARTY_FILE_BYTES + 1)
+        if len(raw_bytes) > MAX_PARTY_FILE_BYTES:
+            raise PartyFileError("The party file is too large (maximum 1 MB).")
+        raw = raw_bytes.decode("utf-8")
     except PermissionError:
         raise PartyFileError(f"Cannot read the party file — permission denied: {path}")
+    except UnicodeDecodeError:
+        raise PartyFileError("The party file is not valid UTF-8 text.")
     except OSError as e:
         raise PartyFileError(f"Cannot read the party file: {e}")
 
@@ -389,13 +431,21 @@ def load_party_string(raw_json: str) -> PartyConfig:
     """
     if not raw_json or not raw_json.strip():
         raise PartyFileError("The party file is empty.")
+    if len(raw_json) > MAX_PARTY_FILE_BYTES or len(raw_json.encode("utf-8")) > MAX_PARTY_FILE_BYTES:
+        raise PartyFileError("The party file is too large (maximum 1 MB).")
 
     try:
-        data = json.loads(raw_json)
+        data = json.loads(
+            raw_json,
+            object_pairs_hook=_reject_duplicate_json_keys,
+            parse_constant=_reject_json_constant,
+        )
     except json.JSONDecodeError as e:
         raise PartyFileError(
             f"The party file is not valid JSON. Check for typos or missing commas near line {e.lineno}."
         )
+    except ValueError as e:
+        raise PartyFileError(f"The party file contains invalid JSON values: {e}") from e
 
     if not isinstance(data, dict):
         raise PartyFileError("The party file must be a JSON object (starts with '{').")
@@ -412,6 +462,8 @@ def load_party_string(raw_json: str) -> PartyConfig:
     extensions = data.get("extensions", {})
     if extensions is None:
         extensions = {}
+    if not isinstance(extensions, dict):
+        raise PartyFileError("'extensions' must be an object or null.")
 
     return PartyConfig(
         schema_version=schema_version,

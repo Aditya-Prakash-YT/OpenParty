@@ -8,12 +8,37 @@ import socket
 import time
 import secrets
 import base64
+import ipaddress
 from logger import launcher_logger
 from deps import find_aria2c
 from torrent_creator import FALLBACK_TRACKERS
 
 class Aria2Error(Exception):
     pass
+
+
+def _is_safe_tracker(value: str) -> bool:
+    try:
+        parsed = urllib.parse.urlsplit(value)
+        host = (parsed.hostname or "").rstrip(".").lower()
+        port = parsed.port
+    except ValueError:
+        return False
+    try:
+        address = ipaddress.ip_address(host) if host else None
+    except ValueError:
+        address = None
+    return bool(
+        len(value) <= 2048
+        and parsed.scheme.lower() in {"udp", "http", "https"}
+        and host
+        and not parsed.username
+        and not parsed.password
+        and host != "localhost"
+        and not host.endswith((".localhost", ".local", ".internal", ".home.arpa"))
+        and (address is None or address.is_global)
+        and (port is None or 1 <= port <= 65535)
+    )
 
 def get_free_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -49,9 +74,9 @@ class Aria2Manager:
             exe,
             "--no-conf=true",
             "--enable-rpc=true",
+            "--rpc-listen-all=false",
             f"--rpc-listen-port={self.port}",
             f"--rpc-secret={self.secret}",
-            "--rpc-allow-origin-all",
             "--daemon=false",
             f"--dir={save_dir}",
             "--bt-metadata-only=false",
@@ -127,7 +152,9 @@ class Aria2Manager:
         req = urllib.request.Request(self.rpc_url, data=json.dumps(req_data).encode('utf-8'),
                                      headers={'Content-Type': 'application/json'})
         try:
-            with urllib.request.urlopen(req, timeout=5) as response:
+            # Never route the local RPC request through environment proxies.
+            opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+            with opener.open(req, timeout=5) as response:
                 result = json.loads(response.read().decode('utf-8'))
                 if "error" in result:
                     raise Aria2Error(result["error"].get("message", "Unknown RPC Error"))
@@ -139,12 +166,39 @@ class Aria2Manager:
         return self._call("aria2.getVersion")
 
     def add_uri(self, uri: str) -> str:
-        """Add a URI (magnet link or HTTP URL) for download. Returns the GID."""
+        """Add a validated magnet link for download. Returns the GID."""
         clean_uri = uri.strip()
-        # If it's a magnet link without trackers, append public trackers for faster peer discovery
-        if clean_uri.startswith("magnet:") and "&tr=" not in clean_uri:
-            for tr in FALLBACK_TRACKERS:
-                clean_uri += f"&tr={urllib.parse.quote(tr)}"
+        if len(clean_uri) > 16384:
+            raise Aria2Error("Magnet link is too long.")
+        try:
+            parsed = urllib.parse.urlsplit(clean_uri)
+            query = urllib.parse.parse_qsl(parsed.query, keep_blank_values=True)
+        except ValueError as e:
+            raise Aria2Error("Invalid magnet link.") from e
+        if parsed.scheme.lower() != "magnet" or not any(
+            key.lower() == "xt" and value.strip() for key, value in query
+        ):
+            raise Aria2Error("A magnet link with an xt topic is required.")
+
+        # Keep only metadata and valid public tracker parameters. Web seeds and
+        # alternative sources could make an invite fetch arbitrary HTTP URLs.
+        safe_query = []
+        for key, value in query:
+            lowered = key.lower()
+            if lowered == "xt" and value.strip():
+                safe_query.append(("xt", value))
+            elif lowered == "dn" and value.strip():
+                safe_query.append(("dn", value[:255]))
+            elif lowered == "tr" and _is_safe_tracker(value):
+                safe_query.append(("tr", value))
+            elif lowered == "tr" and value.strip():
+                raise Aria2Error("Magnet link contains a tracker that is not a public UDP or HTTP(S) URL.")
+
+        if not any(key == "tr" for key, _ in safe_query):
+            safe_query.extend(("tr", tracker) for tracker in FALLBACK_TRACKERS)
+        clean_uri = urllib.parse.urlunsplit((
+            "magnet", "", "", urllib.parse.urlencode(safe_query), ""
+        ))
         return self._call("aria2.addUri", [[clean_uri]])
 
     def add_torrent(self, torrent_path: str) -> str:

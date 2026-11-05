@@ -185,7 +185,7 @@ class DownloadWidget(QWidget):
         if not hint:
             return None
         candidate = os.path.join(self.save_dir, hint)
-        if not os.path.isfile(candidate):
+        if not self._is_safe_download_path(candidate) or not os.path.isfile(candidate):
             return None
         expected_size = self.config.media.file.size
         if expected_size is not None and expected_size > 0:
@@ -198,6 +198,15 @@ class DownloadWidget(QWidget):
                 launcher_logger.info(f"Existing file size mismatch: expected {expected_size}, got {actual_size}")
                 return None
         return candidate
+
+    def _is_safe_download_path(self, path: str) -> bool:
+        """Require aria2-reported media paths to resolve inside its download root."""
+        try:
+            root = os.path.normcase(os.path.realpath(os.path.abspath(self.save_dir)))
+            resolved = os.path.normcase(os.path.realpath(os.path.abspath(path)))
+            return os.path.commonpath((root, resolved)) == root
+        except (OSError, ValueError, TypeError):
+            return False
 
     def _add_download(self):
         val = self.config.media.source.value
@@ -348,7 +357,7 @@ class DownloadWidget(QWidget):
         if hint:
             for f in files:
                 path = f.get("path", "")
-                if os.path.basename(path) == hint:
+                if path and self._is_safe_download_path(path) and os.path.basename(path) == hint:
                     media_path = path
                     break
         
@@ -357,6 +366,8 @@ class DownloadWidget(QWidget):
             largest_size = -1
             for f in files:
                 path = f.get("path", "")
+                if not path or not self._is_safe_download_path(path):
+                    continue
                 size = int(f.get("length", 0))
                 ext = os.path.splitext(path)[1].lower()
                 if ext in [".mkv", ".mp4", ".avi", ".mov", ".wmv", ".webm", ".flv"] and size > largest_size:
@@ -368,12 +379,15 @@ class DownloadWidget(QWidget):
             largest_size = -1
             for f in files:
                 path = f.get("path", "")
+                if not path or not self._is_safe_download_path(path):
+                    continue
                 size = int(f.get("length", 0))
                 if size > largest_size:
                     largest_size = size
                     media_path = path
                     
-        if not media_path or not os.path.exists(media_path):
+        if (not media_path or not self._is_safe_download_path(media_path)
+                or not os.path.isfile(media_path)):
             msg = errors.err_media_file_missing()
             self._show_error(msg, show_try_again=False)
             return

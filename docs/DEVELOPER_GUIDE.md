@@ -4,12 +4,12 @@ OpenParty is a decentralized watch party orchestrator built in Python (PySide6).
 
 ## Architecture Overview
 
-- **`setup/setup.cmd`**: Handles UAC elevation, checks for Python 3.12+ (downloads installer if missing), installs pip dependencies (`requirements.txt`), installs VLC and qBittorrent silently, extracts portable aria2c to `setup/tools/aria2/`, downloads and runs the Syncplay installer, and registers the `.oparty` file association. All downloads use PowerShell `Invoke-WebRequest` with TLS 1.2 — no `winget` required.
+- **`setup/setup.cmd` / `setup/setup.ps1`**: The batch launcher invokes the PowerShell installer. It downloads and verifies pinned VLC, aria2, and Syncplay packages, installs the Syncplay VC++ runtime when needed, places portable tools in protected `%ProgramData%\OpenParty\tools`, and registers `.oparty` for the current user. Progress is logged to `%ProgramData%\OpenParty\install.log`. Python and qBittorrent are not required by the packaged application.
 - **`app/main.py`**: The entrypoint and screen-flow coordinator. It wires screen signals and moves the `QStackedWidget` between workflows; it does not construct the home-screen UI.
 - **`app/gui/home.py`**: The home screen, dependency status banner, and host/join/setup/help actions. It emits intent signals so navigation remains in `main.py`.
 - **`app/config/`**: JSON parsing and validation layer (`loader.py`). Strongly typed using Python Dataclasses to represent `.oparty` files.
-- **`app/downloader/`**: An asynchronous JSON-RPC client (`aria2.py`) bridging Python to a detached `aria2c` process. It dynamically binds to open ports and generates random secret tokens.
-- **`app/torrent_creator.py`**: A zero-dependency qBittorrent Web API client that handles authentication and uses the v5 `torrentCreator` API (with a pure-Python Bencode fallback for v4) to automate torrent creation and seeding for the host.
+- **`app/downloader/`**: A JSON-RPC client (`aria2.py`) bridging Python to a detached `aria2c` process. RPC is loopback-only and protected by an unpredictable token.
+- **`app/torrent_creator.py`**: Creates BitTorrent v1 metadata in Python and starts aria2c in seeding mode. qBittorrent is an optional GUI fallback; the app does not configure its Web UI or guess credentials.
 - **`app/gui/`**: Individual screen logic (Create, Join, Download, Launch), the `error_panel.py` abstraction, and `torrent_worker.py` (a QThread for non-blocking torrent generation).
 - **`app/deps.py`**: Passive dependency detection. Uses the Windows Registry and `shutil.which()` to find installed executables.
 

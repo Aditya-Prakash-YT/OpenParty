@@ -5,8 +5,8 @@ Pure-Python .torrent file generation and magnet link building.
 Seeding is handled via aria2c (the same download engine already required
 by OpenParty), so no extra dependencies are needed.
 
-QBitClient is retained as a secondary fallback if qBittorrent happens
-to be running with its Web API enabled.
+QBitClient remains an optional explicit-credentials loopback helper; the GUI
+does not enable qBittorrent's Web API or guess its credentials.
 """
 
 import json
@@ -239,9 +239,9 @@ def seed_with_aria2c(torrent_path: str, data_dir: str,
         aria2c_exe,
         "--no-conf=true",
         "--enable-rpc=true",
+        "--rpc-listen-all=false",
         f"--rpc-listen-port={rpc_port}",
         f"--rpc-secret={secret}",
-        "--rpc-allow-origin-all",
         "--daemon=false",
         f"--dir={data_dir}",
         "--bt-metadata-only=false",
@@ -287,7 +287,8 @@ def seed_with_aria2c(torrent_path: str, data_dir: str,
             if proc.poll() is not None:
                 return None
             try:
-                with urllib.request.urlopen(rpc_request, timeout=0.5) as response:
+                opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+                with opener.open(rpc_request, timeout=0.5) as response:
                     result = json.loads(response.read().decode("utf-8"))
                 if result.get("result"):
                     return proc
@@ -380,13 +381,18 @@ class QBitClient:
     """Minimal, zero-dependency qBittorrent Web API client."""
 
     def __init__(self, host: str = "127.0.0.1", port: int = 8080,
-                 username: str = "admin", password: str = "adminadmin"):
+                 username: Optional[str] = None, password: Optional[str] = None):
+        if host != "127.0.0.1":
+            raise ValueError("The qBittorrent API client only supports loopback hosts.")
+        if not isinstance(port, int) or not 1 <= port <= 65535:
+            raise ValueError("The qBittorrent API port is invalid.")
         self.base = f"http://{host}:{port}"
         self.username = username
         self.password = password
 
         self._cj = http.cookiejar.CookieJar()
         self._opener = urllib.request.build_opener(
+            urllib.request.ProxyHandler({}),
             urllib.request.HTTPCookieProcessor(self._cj)
         )
         self._logged_in = False
@@ -421,6 +427,8 @@ class QBitClient:
 
     def login(self) -> None:
         """Authenticate with qBittorrent.  Raises QBitError on failure."""
+        if not self.username or not self.password:
+            raise QBitError("qBittorrent API credentials are not configured.")
         body = self._post("/api/v2/auth/login", {
             "username": self.username,
             "password": self.password,
