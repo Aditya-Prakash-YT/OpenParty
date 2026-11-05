@@ -137,7 +137,7 @@ class MainWindow(QMainWindow):
         launcher_logger.info("Host launching party: %s", config.party.name)
         if local_media_path and os.path.isfile(local_media_path):
             self.stacked_widget.setCurrentWidget(self.launch_widget)
-            self.launch_widget.start_launch(config, local_media_path)
+            self.launch_widget.start_launch(config, local_media_path, is_host=True)
             return
 
         self.stacked_widget.setCurrentWidget(self.download_widget)
@@ -145,7 +145,12 @@ class MainWindow(QMainWindow):
 
     def on_download_complete(self, media_path):
         self.stacked_widget.setCurrentWidget(self.launch_widget)
-        self.launch_widget.start_launch(self.download_widget.config, media_path)
+        self.launch_widget.start_launch(
+            self.download_widget.config,
+            media_path,
+            p2p_manager=self.download_widget.manager,
+            p2p_gid=self.download_widget.gid,
+        )
 
     def closeEvent(self, event):
         try:

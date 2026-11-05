@@ -20,10 +20,13 @@ As the host, your job is to create the party file and send it to your friends.
    - **Party Name:** What you're watching (e.g., "Friday Movie Night").
    - **Room Name:** A unique name for your Syncplay room (e.g., "daves-movie-room").
    - **Password:** Optional, but recommended to keep strangers out.
-   - **Media Source:** Click **Create Torrent & Seed** and pick your video file. OpenParty creates a torrent, starts seeding with aria2c, and fills in the magnet link. (Or, you can paste an existing magnet link.)
+   - **Media Source:** Click **Browse Video File...** and pick your video file. OpenParty creates a torrent, verifies it, starts seeding with aria2c, and fills in the magnet link. (Or, you can paste an existing magnet link.)
    - **Optional Fields:** You can add a description, file size, or name hint (if you use the Create Torrent button, size and name hint are filled automatically).
-4. Click **Export Party File**.
-5. Send the resulting `.oparty` file to your friends (e.g., drag and drop it into Discord).
+4. Wait for OpenParty to verify the file against the torrent. It starts the built-in seeder and confirms the exact torrent is active before enabling **Start Watch Party**.
+5. Export the party file and send it to your friends (for example, in Discord).
+6. Keep OpenParty running while guests download. The host screen shows connected peers, their estimated completion, and current transfer rates. Use **Stop Sharing** to stop serving the file while playback continues.
+
+OpenParty opens a narrow Windows Firewall rule for aria2 on TCP/UDP ports 51413-51420 during setup. A home router can still block incoming connections: forward TCP and UDP ports 51413-51420 to the host PC. If the ISP uses carrier-grade NAT (CGNAT), direct peer hosting may not work; use a mesh VPN or a public relay.
 
 ## 3. Joining a Watch Party
 
@@ -33,10 +36,11 @@ As a guest, joining is incredibly simple.
 2. Review the party details on the screen to ensure it's the right movie.
 3. Click **Start Party**.
 4. OpenParty will handle everything else automatically:
-   - It will fetch the metadata.
-   - It will download the movie into your `Downloads/OpenParty` folder.
+   - It will fetch the metadata and download the movie into your `Downloads/OpenParty` folder.
    - Once complete, it will verify the file size and integrity.
+   - It will keep the verified torrent available to other peers while OpenParty stays open.
    - Finally, it will launch Syncplay and VLC, automatically pointing them at the movie and connecting you to the host's room.
+   - The playback screen shows live connections and per-peer transfer rates. Peer progress is estimated from the pieces that peer reports; BitTorrent does not provide party member names or an invite-wide attendance list.
 
 ## 4. Troubleshooting
 
@@ -44,6 +48,6 @@ OpenParty is designed to fix itself or give you clear instructions if something 
 
 - **"Syncplay is missing"**: Run `setup/setup.cmd` again as Administrator.
 - **"Disk Full"**: Free up space on your `C:\` drive. OpenParty will resume where it left off when you click Try Again.
-- **"Download Stalled"**: The torrent might be dead. Ask the host to check the magnet link.
+- **"Download Stalled" / no peers**: Ask the host to keep OpenParty open and check the upload status. For remote guests, forward TCP/UDP 51413-51420 to the host PC. A router port forward cannot bypass CGNAT or a network that blocks peer-to-peer traffic.
 
 If you ever need to ask a technical friend for help, click **View Logs** on the main menu and send them the `launcher.log` and `syncplay.log` files.

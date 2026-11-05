@@ -3,7 +3,7 @@ import random
 import string
 import datetime
 import os
-import subprocess
+import urllib.parse
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
                                QLineEdit, QPushButton, QMessageBox, QFormLayout, 
                                QScrollArea, QFileDialog, QRadioButton, QButtonGroup,
@@ -12,7 +12,6 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QGuiApplication
 
 from config.loader import load_party_string, PartyFileError
-from deps import find_qbittorrent
 from gui.torrent_worker import TorrentWorker
 
 def generate_random_string(length=10):
@@ -27,6 +26,7 @@ class CreatePartyWidget(QWidget):
         self._torrent_worker = None
         self._created_torrent_path = None
         self._local_file_path = None
+        self._p2p_invite = None
         self._setup_ui()
         self._connect_signals()
         self._validate_live()
@@ -209,6 +209,16 @@ class CreatePartyWidget(QWidget):
         self.subtitle_input = QLineEdit()
         self.subtitle_input.setPlaceholderText("https://... (Optional subtitle URL)")
         adv_form.addRow("Subtitle URL:", self.subtitle_input)
+
+        self.public_host_input = QLineEdit()
+        self.public_host_input.setPlaceholderText(
+            "Optional public IPv4; auto-detected when blank"
+        )
+        self.public_host_input.setToolTip(
+            "For friends outside your network, forward TCP 51413 and 51414 to this PC. "
+            "Leave blank to let OpenParty detect your public IPv4."
+        )
+        adv_form.addRow("Remote host IP:", self.public_host_input)
         
         # Hidden metadata fields populated automatically
         self.name_hint_input = QLineEdit()
@@ -278,6 +288,7 @@ class CreatePartyWidget(QWidget):
         self.room_input.textChanged.connect(self._validate_live)
         self.server_input.textChanged.connect(self._validate_live)
         self.password_input.textChanged.connect(self._validate_live)
+        self.public_host_input.textChanged.connect(self._validate_live)
         
         self.btn_start_party.clicked.connect(self._on_start_party)
         self.btn_export.clicked.connect(self._on_export)
@@ -310,6 +321,7 @@ class CreatePartyWidget(QWidget):
         self.name_hint_input.clear()
         self.size_input.clear()
         self._created_torrent_path = None
+        self._p2p_invite = None
         file_name = os.path.basename(file_path)
         self.lbl_selected_file.setText(f"Selected: <b>{file_name}</b>")
         
@@ -325,7 +337,11 @@ class CreatePartyWidget(QWidget):
         self.lbl_torrent_status.setText("Hashing file and generating torrent...")
         self.lbl_torrent_status.show()
 
-        self._torrent_worker = TorrentWorker(file_path, parent=self)
+        self._torrent_worker = TorrentWorker(
+            file_path,
+            public_host=self.public_host_input.text().strip(),
+            parent=self,
+        )
         self._torrent_worker.status_update.connect(self._on_torrent_status)
         self._torrent_worker.finished_ok.connect(self._on_torrent_ok)
         self._torrent_worker.finished_err.connect(self._on_torrent_err)
@@ -335,11 +351,13 @@ class CreatePartyWidget(QWidget):
         clean_msg = msg.replace("\u2714", "").replace("\u2718", "").strip()
         self.lbl_torrent_status.setText(clean_msg)
 
-    def _on_torrent_ok(self, magnet: str, file_name: str, file_size: int, torrent_path: str = ""):
+    def _on_torrent_ok(self, magnet: str, file_name: str, file_size: int,
+                       torrent_path: str = "", p2p_invite=None):
         self.source_value_input.setText(magnet)
         self.name_hint_input.setText(file_name)
         self.size_input.setText(str(file_size))
         self._created_torrent_path = torrent_path
+        self._p2p_invite = p2p_invite if isinstance(p2p_invite, dict) else None
 
         self.btn_choose_file.setEnabled(True)
         self.btn_choose_file.setText("Change Video File...")
@@ -349,7 +367,7 @@ class CreatePartyWidget(QWidget):
         if "could not be started" in seed_status:
             self.lbl_torrent_status.setStyleSheet("font-size: 12px; color: #A85D5D; font-weight: 500;")
             self.lbl_torrent_status.setText(seed_status)
-        elif "Confirm its status" in seed_status:
+        elif "not confirmed" in seed_status or "Confirm its status" in seed_status:
             self.lbl_torrent_status.setStyleSheet("font-size: 12px; color: #725839; font-weight: 500;")
             self.lbl_torrent_status.setText(seed_status)
         else:
@@ -404,6 +422,9 @@ class CreatePartyWidget(QWidget):
                 "password": self.password_input.text().strip()
             }
         }
+
+        if self.radio_file.isChecked() and self._p2p_invite:
+            data["media"]["p2p"] = self._p2p_invite
         
         desc = self.description_input.text().strip()
         if desc:
@@ -460,7 +481,21 @@ class CreatePartyWidget(QWidget):
             load_party_string(raw_json)
             self.lbl_note.setText("Configuration valid. Ready to export or start party.")
             self.lbl_note.setStyleSheet("font-size: 12px; color: #365F50; font-weight: 500;")
-            self.btn_start_party.setEnabled(True)
+            can_start = True
+            if self.radio_file.isChecked() and self._local_file_path:
+                if not self._local_seed_is_ready():
+                    can_start = False
+                    self.lbl_note.setText(
+                        "The invite is valid, but OpenParty has not confirmed an active seeder for this file. "
+                        "Guests will be unable to download it yet."
+                    )
+                    self.lbl_note.setStyleSheet("font-size: 12px; color: #8A6A38; font-weight: 500;")
+                else:
+                    self.lbl_note.setText(
+                        "Seeder is active. If remote guests cannot connect, forward TCP/UDP 51413-51420 "
+                        "to this PC in your router settings."
+                    )
+            self.btn_start_party.setEnabled(can_start)
             self.btn_export.setEnabled(True)
             self.btn_copy.setEnabled(True)
         except PartyFileError as e:
@@ -470,9 +505,44 @@ class CreatePartyWidget(QWidget):
             self.btn_export.setEnabled(False)
             self.btn_copy.setEnabled(False)
 
+    def _local_seed_is_ready(self, *, require_rpc: bool = False) -> bool:
+        if not self._local_file_path or not os.path.isfile(self._local_file_path):
+            return False
+        try:
+            from torrent_creator import SeederManager
+            query = urllib.parse.parse_qs(
+                urllib.parse.urlsplit(self.source_value_input.text().strip()).query
+            )
+            xt = query.get("xt", [""])[0]
+            info_hash = xt.partition(":")[-1].partition(":")[-1]
+            active_path = SeederManager.get_current_file(info_hash)
+            ready = bool(
+                active_path and os.path.normcase(os.path.realpath(active_path)) ==
+                os.path.normcase(os.path.realpath(self._local_file_path))
+            )
+            if not ready or not require_rpc:
+                return ready
+            activity = SeederManager.get_status()
+            status = (activity or {}).get("status", {})
+            return (
+                str(status.get("infoHash", "")).lower() == info_hash.lower()
+                and str(status.get("seeder", "false")).lower() == "true"
+                and str(status.get("status", "")).lower() == "active"
+            )
+        except Exception:
+            return False
+
     def _on_start_party(self):
         raw_json = self._generate_json()
         try:
+            if self.radio_file.isChecked() and self._local_file_path and not self._local_seed_is_ready(require_rpc=True):
+                QMessageBox.warning(
+                    self,
+                    "Seeder Not Ready",
+                    "OpenParty cannot confirm that this file is being seeded. "
+                    "Guests will not be able to download it until a seeder is running.",
+                )
+                return
             config = load_party_string(raw_json)
             local_path = ""
             if self.radio_file.isChecked() and self._local_file_path and os.path.isfile(self._local_file_path):

@@ -6,6 +6,9 @@ and returns a clean PartyConfig object on success or raises
 PartyFileError with a single human-readable reason on failure.
 """
 
+import base64
+import binascii
+import hashlib
 import json
 import re
 import os
@@ -60,6 +63,22 @@ class MediaFile:
 
 
 @dataclass
+class P2PEndpoint:
+    """A host-owned tracker/web-seed endpoint carried by a party invite."""
+    scope: str
+    base_url: str
+    peer_host: str
+    peer_port: int
+
+
+@dataclass
+class P2PInfo:
+    """Embedded torrent metadata and deterministic bootstrap routes."""
+    torrent_bytes: bytes
+    endpoints: List[P2PEndpoint] = field(default_factory=list)
+
+
+@dataclass
 class Subtitle:
     language: str
     url: str
@@ -70,6 +89,7 @@ class MediaInfo:
     source: MediaSource
     file: MediaFile = field(default_factory=MediaFile)
     subtitles: List[Subtitle] = field(default_factory=list)
+    p2p: Optional[P2PInfo] = None
 
 
 @dataclass
@@ -297,6 +317,133 @@ def _validate_media_file(file_data: dict) -> MediaFile:
     return MediaFile(name_hint=name_hint, size=size)
 
 
+MAX_EMBEDDED_TORRENT_BYTES = 512 * 1024
+
+
+def _magnet_btih(value: str) -> Optional[str]:
+    """Return a v1 info hash from a magnet, accepting hex or base32 BTIH."""
+    try:
+        query = urllib.parse.parse_qs(urllib.parse.urlsplit(value).query)
+    except ValueError:
+        return None
+    for topic in query.get("xt", []):
+        prefix = "urn:btih:"
+        if not topic.lower().startswith(prefix):
+            continue
+        raw_hash = topic[len(prefix):].strip()
+        if re.fullmatch(r"[0-9a-fA-F]{40}", raw_hash):
+            return raw_hash.lower()
+        if re.fullmatch(r"[A-Za-z2-7]{32}", raw_hash):
+            try:
+                return base64.b32decode(raw_hash.upper()).hex()
+            except binascii.Error:
+                return None
+    return None
+
+
+def _torrent_v1_info_hash(payload: bytes) -> str:
+    """Check embedded metadata against the invite's magnet before aria2 sees it."""
+    try:
+        # Kept in the creator module so torrent generation and validation share
+        # one canonical bencode implementation.
+        from torrent_creator import bdecode, bencode
+
+        torrent = bdecode(payload)
+        info = torrent.get(b"info") if isinstance(torrent, dict) else None
+        if not isinstance(info, dict):
+            raise ValueError("missing info dictionary")
+        return hashlib.sha1(bencode(info)).hexdigest()
+    except Exception as exc:
+        raise PartyFileError("The embedded torrent metadata is invalid.") from exc
+
+
+def _validate_p2p_endpoint(data: dict, index: int) -> P2PEndpoint:
+    section = f"media.p2p.endpoints[{index + 1}]"
+    scope = _require_string(data, "scope", section).lower()
+    base_url = _require_string(data, "base_url", section)
+    peer_host = _require_string(data, "peer_host", section)
+    peer_port = _require_int(data, "peer_port", section)
+    if scope not in {"lan", "public"}:
+        raise PartyFileError(f"'scope' in '{section}' must be 'lan' or 'public'.")
+    if not 1 <= peer_port <= 65535:
+        raise PartyFileError(f"'peer_port' in '{section}' is not a valid port.")
+    try:
+        parsed = urllib.parse.urlsplit(base_url)
+        host = parsed.hostname or ""
+        port = parsed.port
+        endpoint_ip = ipaddress.IPv4Address(host)
+        peer_ip = ipaddress.IPv4Address(peer_host)
+    except (ValueError, ipaddress.AddressValueError) as exc:
+        raise PartyFileError(f"'{section}' must use an IPv4 host address and port.") from exc
+    if (len(base_url) > 1024 or parsed.scheme.lower() != "http" or not port
+            or parsed.username or parsed.password or parsed.query or parsed.fragment
+            or not re.fullmatch(r"/[A-Za-z0-9_-]{32,128}", parsed.path)
+            or endpoint_ip != peer_ip):
+        raise PartyFileError(f"'{section}' has an invalid bootstrap URL.")
+    if scope == "lan" and not endpoint_ip.is_private:
+        raise PartyFileError(f"'{section}' is marked LAN but does not contain a private address.")
+    if scope == "public" and not endpoint_ip.is_global:
+        raise PartyFileError(f"'{section}' is marked public but does not contain a public address.")
+    return P2PEndpoint(scope=scope, base_url=base_url, peer_host=str(peer_ip), peer_port=peer_port)
+
+
+def _validate_p2p(data: object, magnet: str) -> Optional[P2PInfo]:
+    if data is None:
+        return None
+    if not isinstance(data, dict):
+        raise PartyFileError("'p2p' in 'media' must be an object or null.")
+    version = _require_int(data, "version", "media.p2p")
+    if version != 1:
+        raise PartyFileError("This party uses an unsupported P2P bootstrap version.")
+    torrent_text = _require_string(data, "torrent", "media.p2p")
+    if len(torrent_text) > 720000:
+        raise PartyFileError("The embedded torrent metadata is too large.")
+    try:
+        torrent_bytes = base64.b64decode(torrent_text, validate=True)
+    except (ValueError, binascii.Error) as exc:
+        raise PartyFileError("The embedded torrent metadata is not valid base64.") from exc
+    if not torrent_bytes or len(torrent_bytes) > MAX_EMBEDDED_TORRENT_BYTES:
+        raise PartyFileError("The embedded torrent metadata is too large or empty.")
+    expected_hash = _magnet_btih(magnet)
+    actual_hash = _torrent_v1_info_hash(torrent_bytes)
+    if not expected_hash or actual_hash != expected_hash:
+        raise PartyFileError("The embedded torrent does not match the media magnet link.")
+
+    endpoint_data = _require_key(data, "endpoints", "media.p2p")
+    if not isinstance(endpoint_data, list) or not endpoint_data or len(endpoint_data) > 8:
+        raise PartyFileError("'endpoints' in 'media.p2p' must contain between 1 and 8 routes.")
+    endpoints = []
+    seen = set()
+    for index, endpoint in enumerate(endpoint_data):
+        if not isinstance(endpoint, dict):
+            raise PartyFileError(f"Endpoint {index + 1} in 'media.p2p' must be an object.")
+        parsed = _validate_p2p_endpoint(endpoint, index)
+        if parsed.base_url in seen:
+            raise PartyFileError("The P2P bootstrap endpoints contain a duplicate route.")
+        seen.add(parsed.base_url)
+        endpoints.append(parsed)
+    return P2PInfo(torrent_bytes=torrent_bytes, endpoints=endpoints)
+
+
+def usable_p2p_endpoints(p2p: Optional[P2PInfo]) -> List[P2PEndpoint]:
+    """Select local LAN routes first and public routes for Internet guests.
+
+    A private endpoint from an untrusted invite is never contacted unless it is
+    on this device's own LAN. This retains direct LAN setup while avoiding
+    arbitrary private-network requests from a party file.
+    """
+    if not p2p:
+        return []
+    try:
+        from p2p_bootstrap import is_same_lan_address
+    except Exception:
+        return [endpoint for endpoint in p2p.endpoints if endpoint.scope == "public"]
+    local = [endpoint for endpoint in p2p.endpoints
+             if endpoint.scope == "lan" and is_same_lan_address(endpoint.peer_host)]
+    public = [endpoint for endpoint in p2p.endpoints if endpoint.scope == "public"]
+    return local if local else public
+
+
 def _validate_subtitles(subs_data: list) -> List[Subtitle]:
     if not isinstance(subs_data, list):
         raise PartyFileError("'subtitles' in 'media' must be a list.")
@@ -332,7 +479,9 @@ def _validate_media(data: dict) -> MediaInfo:
         subs_data = []
     subtitles = _validate_subtitles(subs_data)
 
-    return MediaInfo(source=source, file=media_file, subtitles=subtitles)
+    p2p = _validate_p2p(section.get("p2p"), source.value)
+
+    return MediaInfo(source=source, file=media_file, subtitles=subtitles, p2p=p2p)
 
 
 def _validate_sync(data: dict) -> SyncInfo:

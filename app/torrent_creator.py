@@ -38,6 +38,10 @@ PUBLIC_TRACKERS = [
     "http://tracker.openbittorrent.com:80/announce",
 ]
 FALLBACK_TRACKERS = PUBLIC_TRACKERS
+# A stable peer port lets the per-party bootstrap tracker return a usable
+# address immediately. Port 51414 is reserved for the host's HTTP bootstrap.
+BITTORRENT_PORT = 51413
+BITTORRENT_PORT_RANGE = str(BITTORRENT_PORT)
 
 def get_optimal_piece_length(file_size: int) -> int:
     """Calculate an optimal BitTorrent piece size based on file size."""
@@ -182,7 +186,8 @@ def build_magnet_link(info_hash: str, name: str = "",
 
 def create_local_torrent(file_path: str,
                          output_torrent_path: Optional[str] = None,
-                         trackers: Optional[list] = None) -> Tuple[str, str, str]:
+                         trackers: Optional[list] = None,
+                         magnet_trackers: Optional[list] = None) -> Tuple[str, str, str]:
     """Pure-Python torrent generator without external dependencies.
     Returns (magnet_link, info_hash, torrent_file_path).
     """
@@ -198,7 +203,14 @@ def create_local_torrent(file_path: str,
     with open(output_torrent_path, "wb") as f:
         f.write(torrent_bytes)
 
-    magnet = build_magnet_link(info_hash, os.path.basename(file_path), trackers)
+    # A party may embed a private host tracker in the torrent metadata. Keep
+    # that route out of the generic magnet, which older clients validate as a
+    # public-only input and which should not cause arbitrary LAN requests.
+    magnet = build_magnet_link(
+        info_hash,
+        os.path.basename(file_path),
+        magnet_trackers if magnet_trackers is not None else trackers,
+    )
     return magnet, info_hash, output_torrent_path
 
 
@@ -213,7 +225,8 @@ def _get_free_port() -> int:
 
 
 def seed_with_aria2c(torrent_path: str, data_dir: str,
-                     aria2c_exe: Optional[str] = None) -> Optional[subprocess.Popen]:
+                     aria2c_exe: Optional[str] = None,
+                     status_callback=None) -> Optional[subprocess.Popen]:
     """Start aria2c in seed-only mode for an already-complete torrent.
 
     Args:
@@ -230,6 +243,20 @@ def seed_with_aria2c(torrent_path: str, data_dir: str,
     if not aria2c_exe:
         return None
     if not os.path.isfile(torrent_path) or not os.path.isdir(data_dir):
+        return None
+
+    try:
+        expected_info_hash, torrent_name, expected_length = _torrent_identity(torrent_path)
+    except Exception:
+        return None
+    if (not torrent_name or os.path.basename(torrent_name) != torrent_name
+            or torrent_name in (".", "..")):
+        return None
+    source_file = os.path.join(data_dir, torrent_name)
+    try:
+        if not os.path.isfile(source_file) or os.path.getsize(source_file) != expected_length:
+            return None
+    except OSError:
         return None
 
     rpc_port = _get_free_port()
@@ -249,10 +276,9 @@ def seed_with_aria2c(torrent_path: str, data_dir: str,
         "--enable-dht=true",
         "--enable-peer-exchange=true",
         "--bt-enable-lpd=true",
-        "--bt-seed-unverified=true",
         "--seed-ratio=0.0",        # seed indefinitely (no ratio limit)
-        "--listen-port=6881-6999",
-        "--dht-listen-port=6881-6999",
+        f"--listen-port={BITTORRENT_PORT_RANGE}",
+        f"--dht-listen-port={BITTORRENT_PORT_RANGE}",
         "--bt-max-peers=100",
         "--file-allocation=none",
         "--summary-interval=0",
@@ -278,11 +304,16 @@ def seed_with_aria2c(torrent_path: str, data_dir: str,
                 "jsonrpc": "2.0",
                 "id": "openparty-seeder-ready",
                 "method": "aria2.tellActive",
-                "params": [f"token:{secret}"],
+                "params": [
+                    f"token:{secret}",
+                    ["gid", "status", "infoHash", "completedLength", "totalLength", "seeder"],
+                ],
             }).encode("utf-8"),
             headers={"Content-Type": "application/json"},
         )
-        deadline = time.monotonic() + 8
+        verification_timeout = max(180, min(1800, expected_length / (64 * 1024 * 1024) + 120))
+        deadline = time.monotonic() + verification_timeout
+        last_status_update = 0.0
         while time.monotonic() < deadline:
             if proc.poll() is not None:
                 return None
@@ -290,8 +321,23 @@ def seed_with_aria2c(torrent_path: str, data_dir: str,
                 opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
                 with opener.open(rpc_request, timeout=0.5) as response:
                     result = json.loads(response.read().decode("utf-8"))
-                if result.get("result"):
-                    return proc
+                active = result.get("result")
+                if isinstance(active, list):
+                    for item in active:
+                        if (isinstance(item, dict)
+                                and str(item.get("infoHash", "")).lower() == expected_info_hash
+                                and item.get("seeder") == "true"
+                                and int(item.get("completedLength", 0)) == int(item.get("totalLength", -1))):
+                            # Keep the loopback-only RPC details on the process so
+                            # SeederManager can report real transfer state later.
+                            proc._openparty_rpc_port = rpc_port
+                            proc._openparty_rpc_secret = secret
+                            proc._openparty_gid = item.get("gid")
+                            return proc
+                    now = time.monotonic()
+                    if status_callback and now - last_status_update >= 4:
+                        status_callback("Verifying the media file against its torrent before sharing…")
+                        last_status_update = now
             except Exception:
                 time.sleep(0.2)
 
@@ -310,38 +356,84 @@ def seed_with_aria2c(torrent_path: str, data_dir: str,
         return None
 
 
+def _torrent_identity(torrent_path: str) -> tuple[str, str, int]:
+    """Read a single-file torrent's hash, basename, and expected size."""
+    with open(torrent_path, "rb") as stream:
+        torrent = bdecode(stream.read())
+    info = torrent.get(b"info", {}) if isinstance(torrent, dict) else {}
+    name = info.get(b"name") if isinstance(info, dict) else None
+    length = info.get(b"length") if isinstance(info, dict) else None
+    if not isinstance(name, bytes) or not isinstance(length, int) or length <= 0:
+        raise ValueError("The torrent does not describe one non-empty media file.")
+    return hashlib.sha1(_bencode(info)).hexdigest(), name.decode("utf-8"), length
+
+
+def _seeder_rpc(proc: subprocess.Popen, method: str, params: Optional[list] = None):
+    port = getattr(proc, "_openparty_rpc_port", None)
+    secret = getattr(proc, "_openparty_rpc_secret", None)
+    if not port or not secret or proc.poll() is not None:
+        raise RuntimeError("The local seeder is not running.")
+    request = urllib.request.Request(
+        f"http://127.0.0.1:{port}/jsonrpc",
+        data=json.dumps({
+            "jsonrpc": "2.0",
+            "id": "openparty-seeder-status",
+            "method": method,
+            "params": [f"token:{secret}"] + list(params or []),
+        }).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+    )
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    with opener.open(request, timeout=3) as response:
+        result = json.loads(response.read().decode("utf-8"))
+    if "error" in result:
+        raise RuntimeError(result["error"].get("message", "aria2 RPC error"))
+    return result.get("result")
+
+
 class SeederManager:
     """Manages active aria2c seeding processes across the application."""
     _active_seed_process: Optional[subprocess.Popen] = None
     _active_torrent_path: Optional[str] = None
     _active_file_path: Optional[str] = None
     _active_info_hash: Optional[str] = None
+    _active_gid: Optional[str] = None
 
     @classmethod
     def set_seed_process(cls, proc: subprocess.Popen, torrent_path: str,
                          file_path: str, info_hash: Optional[str] = None):
-        cls.stop_seeding()
+        # The worker has already replaced the previous party bootstrap before
+        # handing us its verified process. Do not tear down the new bootstrap
+        # endpoint here.
+        cls.stop_seeding(stop_bootstrap=False)
         cls._active_seed_process = proc
         cls._active_torrent_path = torrent_path
         cls._active_file_path = file_path
         cls._active_info_hash = info_hash.lower() if info_hash else None
+        cls._active_gid = getattr(proc, "_openparty_gid", None)
 
     @classmethod
-    def stop_seeding(cls):
+    def stop_seeding(cls, *, stop_bootstrap: bool = True):
         proc = cls._active_seed_process
         cls._active_seed_process = None
         cls._active_torrent_path = None
         cls._active_file_path = None
         cls._active_info_hash = None
-        if not proc:
-            return
-        try:
-            proc.terminate()
-            proc.wait(timeout=2)
-        except Exception:
+        cls._active_gid = None
+        if proc:
             try:
-                proc.kill()
+                proc.terminate()
                 proc.wait(timeout=2)
+            except Exception:
+                try:
+                    proc.kill()
+                    proc.wait(timeout=2)
+                except Exception:
+                    pass
+        if stop_bootstrap:
+            try:
+                from p2p_bootstrap import PartyBootstrapManager
+                PartyBootstrapManager.stop()
             except Exception:
                 pass
 
@@ -364,6 +456,38 @@ class SeederManager:
             return cls._active_file_path
         cls.stop_seeding()
         return None
+
+    @classmethod
+    def get_status(cls) -> Optional[dict]:
+        """Return the active torrent and live peer transfer stats, if available."""
+        proc = cls._active_seed_process
+        if proc is None or proc.poll() is not None:
+            cls.stop_seeding()
+            return None
+        gid = cls._active_gid
+        if not gid:
+            return None
+        fields = [
+            "gid", "status", "infoHash", "totalLength", "completedLength",
+            "uploadLength", "downloadSpeed", "uploadSpeed", "connections",
+            "numSeeders", "numPieces", "seeder",
+        ]
+        status = _seeder_rpc(proc, "aria2.tellStatus", [gid, fields])
+        if not isinstance(status, dict):
+            raise RuntimeError("aria2 returned an invalid seeder status.")
+        if str(status.get("infoHash", "")).lower() != (cls._active_info_hash or ""):
+            raise RuntimeError("The active seeder no longer matches this party's torrent.")
+        peers = _seeder_rpc(proc, "aria2.getPeers", [gid])
+        try:
+            from p2p_bootstrap import PartyBootstrapManager
+            bootstrap = PartyBootstrapManager.status()
+        except Exception:
+            bootstrap = None
+        return {
+            "status": status,
+            "peers": peers if isinstance(peers, list) else [],
+            "bootstrap": bootstrap,
+        }
 
 
 atexit.register(SeederManager.stop_seeding)

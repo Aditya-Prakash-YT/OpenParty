@@ -11,7 +11,7 @@ import base64
 import ipaddress
 from logger import launcher_logger
 from deps import find_aria2c
-from torrent_creator import FALLBACK_TRACKERS
+from torrent_creator import BITTORRENT_PORT_RANGE, FALLBACK_TRACKERS
 
 class Aria2Error(Exception):
     pass
@@ -85,11 +85,11 @@ class Aria2Manager:
             "--enable-peer-exchange=true",
             "--bt-enable-lpd=true",
             "--follow-torrent=mem",
-            "--listen-port=6881-6999",
-            "--dht-listen-port=6881-6999",
+            f"--listen-port={BITTORRENT_PORT_RANGE}",
+            f"--dht-listen-port={BITTORRENT_PORT_RANGE}",
             "--bt-max-peers=100",
             "--file-allocation=none",
-            "--seed-time=0",
+            "--seed-ratio=0.0",
             "--summary-interval=0",
             "--console-log-level=error",
             "--bt-tracker=" + ",".join(FALLBACK_TRACKERS),
@@ -207,12 +207,40 @@ class Aria2Manager:
             b64 = base64.b64encode(f.read()).decode('utf-8')
         return self._call("aria2.addTorrent", [b64])
 
+    def add_torrent_bytes(self, torrent_bytes: bytes, web_seeds=None) -> str:
+        """Start a verified embedded torrent with optional host web seeds.
+
+        Callers pass bytes only after config validation has checked their info
+        hash against the invite magnet. The web-seed list is deliberately not
+        read from a generic magnet parameter.
+        """
+        if not isinstance(torrent_bytes, bytes) or not torrent_bytes:
+            raise Aria2Error("The party does not contain valid torrent metadata.")
+        if len(torrent_bytes) > 512 * 1024:
+            raise Aria2Error("The embedded torrent metadata is too large.")
+        seeds = list(web_seeds or [])
+        if any(not isinstance(url, str) or len(url) > 2048 for url in seeds):
+            raise Aria2Error("The party contains an invalid direct host route.")
+        payload = base64.b64encode(torrent_bytes).decode("ascii")
+        return self._call("aria2.addTorrent", [payload, seeds])
+
     def get_status(self, gid: str):
         """Returns status dictionary from aria2c."""
-        status = self._call("aria2.tellStatus", [gid])
+        status = self._call("aria2.tellStatus", [gid, [
+            "gid", "status", "totalLength", "completedLength", "uploadLength",
+            "downloadSpeed", "uploadSpeed", "infoHash", "numPieces", "numSeeders",
+            "connections", "seeder", "errorCode", "errorMessage", "followedBy", "files",
+        ]])
         if not isinstance(status, dict):
             raise Aria2Error("aria2c returned an invalid download status.")
         return status
+
+    def get_peers(self, gid: str):
+        """Return live BitTorrent peers for a download GID."""
+        peers = self._call("aria2.getPeers", [gid])
+        if not isinstance(peers, list):
+            return []
+        return [peer for peer in peers if isinstance(peer, dict)]
         
     def remove(self, gid: str):
         """Removes a download."""

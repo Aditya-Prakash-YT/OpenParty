@@ -103,7 +103,7 @@ if ($RepairCurrentUserSettings) {
 }
 
 if (-not (Test-IsAdministrator)) {
-    Write-Host 'Requesting administrator access to install VLC and the Visual C++ runtime.'
+    Write-Host 'Requesting administrator access to install required tools and allow OpenParty BitTorrent traffic in Windows Firewall.'
     try {
         $quotedScript = '"{0}"' -f $PSCommandPath
         $arguments = @('-NoLogo', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $quotedScript)
@@ -208,7 +208,11 @@ function Get-InstalledVlcVersion {
     ) | Where-Object { $_ -and (Test-Path -LiteralPath $_ -PathType Leaf) }
     foreach ($candidate in $candidates) {
         $text = (Get-Item -LiteralPath $candidate).VersionInfo.ProductVersion
-        if ($text -match '(\d+\.\d+\.\d+)') { return [version]$Matches[1] }
+        # VideoLAN's Windows metadata commonly uses commas (3,0,24,0), while
+        # some builds use dotted semantic versions. Accept either representation.
+        if ($text -match '(\d+)[\.,](\d+)[\.,](\d+)') {
+            return [version]("{0}.{1}.{2}" -f $Matches[1], $Matches[2], $Matches[3])
+        }
     }
     return $null
 }
@@ -267,6 +271,50 @@ function Install-Aria2 {
     Write-Log "aria2 $version installed and verified."
 }
 
+function Configure-HostFirewall {
+    $aria2 = Join-Path $toolsRoot 'aria2\aria2c.exe'
+    if (-not (Test-Path -LiteralPath $aria2 -PathType Leaf)) {
+        throw 'aria2c is missing; cannot configure inbound BitTorrent access.'
+    }
+    foreach ($protocol in @('TCP', 'UDP')) {
+        $ruleName = "OpenParty-BitTorrent-$protocol"
+        Get-NetFirewallRule -Name $ruleName -ErrorAction SilentlyContinue |
+            Remove-NetFirewallRule -ErrorAction SilentlyContinue
+        New-NetFirewallRule `
+            -Name $ruleName `
+            -DisplayName "OpenParty BitTorrent $protocol (51413-51420)" `
+            -Group 'OpenParty' `
+            -Direction Inbound `
+            -Action Allow `
+            -Program $aria2 `
+            -Protocol $protocol `
+            -LocalPort '51413-51420' `
+            -Profile Any | Out-Null
+    }
+    Write-Log 'Windows Firewall allows aria2 TCP/UDP inbound on ports 51413-51420.'
+
+    $app = Join-Path $repoRoot 'dist\OpenParty.exe'
+    if (Test-Path -LiteralPath $app -PathType Leaf) {
+        $bootstrapRule = 'OpenParty-HostBootstrap-TCP'
+        Get-NetFirewallRule -Name $bootstrapRule -ErrorAction SilentlyContinue |
+            Remove-NetFirewallRule -ErrorAction SilentlyContinue
+        New-NetFirewallRule `
+            -Name $bootstrapRule `
+            -DisplayName 'OpenParty host bootstrap TCP (51414)' `
+            -Group 'OpenParty' `
+            -Direction Inbound `
+            -Action Allow `
+            -Program $app `
+            -Protocol TCP `
+            -LocalPort 51414 `
+            -Profile Any | Out-Null
+        Write-Log 'Windows Firewall allows the packaged OpenParty host bootstrap on TCP port 51414.'
+    }
+    else {
+        Write-Log 'OpenParty.exe was not found under dist; Windows may ask before source-mode hosting can accept guest connections.'
+    }
+}
+
 function Install-Syncplay {
     $version = '1.7.6'
     $destination = Join-Path $toolsRoot 'syncplay'
@@ -314,7 +362,8 @@ function Install-VcRuntime {
     }
     Write-Log 'Installing Microsoft Visual C++ 2015-2022 x86 runtime.'
     $process = Start-Process -FilePath $installer -ArgumentList '/install', '/quiet', '/norestart' -Wait -PassThru
-    if ($process.ExitCode -notin @(0, 3010)) { throw "Visual C++ runtime installer exited with code $($process.ExitCode)." }
+    # 1638 means a newer or equivalent runtime is already installed.
+    if ($process.ExitCode -notin @(0, 3010, 1638)) { throw "Visual C++ runtime installer exited with code $($process.ExitCode)." }
     Write-Log 'Microsoft Visual C++ runtime installed.'
 }
 
@@ -324,6 +373,7 @@ Write-Log 'Required components: VLC, Syncplay, aria2. Python and qBittorrent are
 foreach ($task in @(
     @{ Name = 'VLC'; Action = { Install-Vlc } },
     @{ Name = 'aria2'; Action = { Install-Aria2 } },
+    @{ Name = 'BitTorrent firewall'; Action = { Configure-HostFirewall } },
     @{ Name = 'Syncplay'; Action = { Install-Syncplay } },
     @{ Name = 'Visual C++ runtime'; Action = { Install-VcRuntime } }
 )) {

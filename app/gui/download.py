@@ -1,13 +1,13 @@
 import os
 import shutil
-import urllib.parse
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QLabel, QProgressBar, 
                                QPushButton, QHBoxLayout, QFrame, QStyle, QFileDialog)
 from PySide6.QtCore import Qt, QTimer, Signal
 
-from config.loader import PartyConfig
+from config.loader import PartyConfig, usable_p2p_endpoints
 from downloader.aria2 import Aria2Manager, Aria2Error
 from gui.error_panel import ErrorPanel
+from gui.peer_activity import PeerActivityWidget
 from logger import launcher_logger
 import errors
 
@@ -81,6 +81,9 @@ class DownloadWidget(QWidget):
         info_layout.addStretch()
         info_layout.addWidget(self.lbl_eta)
         card_layout.addLayout(info_layout)
+
+        self.peer_activity = PeerActivityWidget("Live peer activity")
+        card_layout.addWidget(self.peer_activity)
         
         self.btn_select_local = QPushButton("Already have this video on your PC? Select file...")
         self.btn_select_local.setFlat(True)
@@ -127,19 +130,11 @@ class DownloadWidget(QWidget):
         
         name_hint = self.config.media.file.name_hint or self.config.party.name
         self.lbl_movie_name.setText(name_hint)
-        self.lbl_status.setText("Checking for existing download...")
+        self.lbl_status.setText("Preparing peer download...")
         self.progress.setValue(0)
         self.lbl_speed.setText("0 KB/s")
         self.lbl_eta.setText("ETA: --")
-
-        # Check if file already exists from a previous download
-        existing = self._find_existing_download()
-        if existing:
-            launcher_logger.info(f"Found already-downloaded file: {existing}")
-            self.lbl_status.setText("Movie file already downloaded! Ready to watch.")
-            self.progress.setValue(100)
-            self.download_complete.emit(existing)
-            return
+        self.peer_activity.update_activity([], {}, host=False)
 
         self.lbl_status.setText("Starting download engine (aria2c)...")
         try:
@@ -160,45 +155,6 @@ class DownloadWidget(QWidget):
             )
             self._show_error(msg)
 
-    def _find_existing_download(self):
-        """Check if the media file was already downloaded in a previous session or is currently seeded."""
-        hint = os.path.basename(self.config.media.file.name_hint.strip())
-        if hint in (".", ".."):
-            hint = ""
-        try:
-            from torrent_creator import SeederManager
-            query = urllib.parse.parse_qs(
-                urllib.parse.urlsplit(self.config.media.source.value).query
-            )
-            xt = query.get("xt", [""])[0]
-            info_hash = xt.partition(":")[-1].partition(":")[-1]
-            seeded_candidate = SeederManager.get_current_file(info_hash)
-            if seeded_candidate and os.path.isfile(seeded_candidate):
-                if not hint or os.path.basename(seeded_candidate) == hint:
-                    expected_size = self.config.media.file.size
-                    if (expected_size is None or expected_size <= 0 or
-                            os.path.getsize(seeded_candidate) == expected_size):
-                        return seeded_candidate
-        except Exception:
-            pass
-
-        if not hint:
-            return None
-        candidate = os.path.join(self.save_dir, hint)
-        if not self._is_safe_download_path(candidate) or not os.path.isfile(candidate):
-            return None
-        expected_size = self.config.media.file.size
-        if expected_size is not None and expected_size > 0:
-            try:
-                actual_size = os.path.getsize(candidate)
-            except OSError as e:
-                launcher_logger.info(f"Could not inspect existing download {candidate}: {e}")
-                return None
-            if actual_size != expected_size:
-                launcher_logger.info(f"Existing file size mismatch: expected {expected_size}, got {actual_size}")
-                return None
-        return candidate
-
     def _is_safe_download_path(self, path: str) -> bool:
         """Require aria2-reported media paths to resolve inside its download root."""
         try:
@@ -209,6 +165,14 @@ class DownloadWidget(QWidget):
             return False
 
     def _add_download(self):
+        p2p = self.config.media.p2p
+        endpoints = usable_p2p_endpoints(p2p)
+        if p2p and endpoints:
+            web_seeds = [f"{endpoint.base_url}/media" for endpoint in endpoints]
+            self.gid = self.manager.add_torrent_bytes(p2p.torrent_bytes, web_seeds)
+            self.lbl_status.setText("Connecting directly to the host and available peers...")
+            return
+
         val = self.config.media.source.value
         self.gid = self.manager.add_uri(val)
         self.lbl_status.setText("Connecting to peers & retrieving movie details...")
@@ -263,6 +227,11 @@ class DownloadWidget(QWidget):
         # Update UI
         completed_length = int(status.get("completedLength", 0))
         speed = int(status.get("downloadSpeed", 0))
+        try:
+            peers = self.manager.get_peers(self.gid)
+        except Exception:
+            peers = []
+        self.peer_activity.update_activity(peers, status, host=False)
         
         if total_length > 0:
             self._metadata_stall_count = 0
@@ -409,7 +378,10 @@ class DownloadWidget(QWidget):
             return
             
         launcher_logger.info(f"Download complete: {media_path}")
-        self._cleanup()
+        # Keep aria2 alive after completion so this device can seed the file to
+        # other participants for as long as OpenParty remains open.
+        self.btn_cancel.hide()
+        self.lbl_status.setText("Download complete. Sharing available pieces with peers.")
         self.download_complete.emit(media_path)
 
     def _show_error(self, msg: str, show_try_again: bool = True):

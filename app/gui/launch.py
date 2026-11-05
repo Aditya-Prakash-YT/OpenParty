@@ -10,6 +10,8 @@ from PySide6.QtCore import Qt, QTimer, QThread, Signal as QSignal
 from config.loader import PartyConfig
 from deps import find_vlc, find_syncplay
 from gui.error_panel import ErrorPanel
+from gui.peer_activity import PeerActivityWidget
+from peer_status import format_bytes
 from logger import launcher_logger
 import errors
 
@@ -43,10 +45,17 @@ class LaunchWidget(QWidget):
         self.process = None
         self.log_file = None
         self._hash_worker = None
+        self._hosting_enabled = False
+        self._peer_manager = None
+        self._peer_gid = None
+        self._peer_status_warning_logged = False
         
         self.step_timer = QTimer()
         self.step_timer.timeout.connect(self._next_step)
         self.current_step = 0
+        self.peer_timer = QTimer(self)
+        self.peer_timer.setInterval(1500)
+        self.peer_timer.timeout.connect(self._poll_host_activity)
         
         self._setup_ui()
 
@@ -82,6 +91,25 @@ class LaunchWidget(QWidget):
         self.card_layout.addWidget(self.lbl_success)
         
         self.main_layout.addWidget(self.card)
+
+        self.host_activity = PeerActivityWidget("Host upload status")
+        self.host_activity.privacy_note.setText(
+            "Only live connections appear here. If remote guests cannot connect, forward TCP/UDP 51413-51420 "
+            "to this PC; CGNAT or blocked networks need a VPN or a public relay."
+        )
+        self.host_activity.hide()
+        self.main_layout.addWidget(self.host_activity)
+
+        self.btn_stop_sharing = QPushButton("Stop Sharing")
+        self.btn_stop_sharing.setCursor(Qt.PointingHandCursor)
+        self.btn_stop_sharing.setStyleSheet(
+            "QPushButton { background: #F1F4F6; color: #35434C; border: 1px solid #DDE4E8; "
+            "border-radius: 7px; padding: 7px 14px; }"
+            "QPushButton:hover { background: #E6ECEF; }"
+        )
+        self.btn_stop_sharing.clicked.connect(self._stop_peer_sharing)
+        self.btn_stop_sharing.hide()
+        self.main_layout.addWidget(self.btn_stop_sharing, alignment=Qt.AlignRight)
         
         # Error panel
         self.error_panel = ErrorPanel()
@@ -123,14 +151,45 @@ class LaunchWidget(QWidget):
         if self.window():
             self.window().showMinimized()
 
-    def start_launch(self, config: PartyConfig, media_path: str):
+    def start_launch(self, config: PartyConfig, media_path: str, *, is_host: bool = False,
+                     p2p_manager=None, p2p_gid=None):
         self.config = config
         self.media_path = media_path
+        self._hosting_enabled = is_host
+        self._peer_manager = p2p_manager
+        self._peer_gid = p2p_gid
+        self.peer_timer.stop()
+        show_peer_activity = is_host or bool(p2p_manager and p2p_gid)
+        self.host_activity.title_label.setText(
+            "Host upload status" if is_host else "Peer sharing status"
+        )
+        self.host_activity.privacy_note.setText(
+            "Only live connections appear here. If remote guests cannot connect, forward TCP/UDP 51413-51420 "
+            "to this PC; CGNAT or blocked networks need a VPN or a public relay."
+            if is_host else
+            "Keep OpenParty open to share this verified download. Peer availability still depends on host and guest networks."
+        )
+        self.host_activity.setVisible(show_peer_activity)
+        self.btn_stop_sharing.setVisible(show_peer_activity)
+        self._peer_status_warning_logged = False
+        if show_peer_activity:
+            self._poll_host_activity()
+            self.peer_timer.start()
         self.current_step = 0
         self.btn_back.hide()
         self.btn_minimize.hide()
         self.lbl_success.hide()
         self.lbl_title.setText("Starting Watch Party...")
+        if show_peer_activity:
+            self.lbl_success.setText(
+                "VLC and Syncplay are synchronized. Keep OpenParty open while guests download or seed this video."
+                if is_host else
+                "VLC and Syncplay are synchronized. Keep OpenParty open to keep sharing this video with other peers."
+            )
+        else:
+            self.lbl_success.setText(
+                "VLC and Syncplay are synchronized with your party.\nYou may minimize OpenParty or return to the main menu."
+            )
         self.error_panel.clear()
         
         # Clear checklist
@@ -199,6 +258,73 @@ class LaunchWidget(QWidget):
             return
         self.current_step += 1
         self.step_timer.start(800)
+
+    def _poll_host_activity(self):
+        if not self._hosting_enabled and not (self._peer_manager and self._peer_gid):
+            return
+        try:
+            if self._hosting_enabled:
+                from torrent_creator import SeederManager
+                activity = SeederManager.get_status()
+                if not activity:
+                    self.host_activity.connection_label.setText(
+                        "No active local seeder. Guests cannot download this media from this host yet."
+                    )
+                    self.host_activity.table.setRowCount(0)
+                    return
+                self.host_activity.update_activity(activity["peers"], activity["status"], host=True)
+                bootstrap = activity.get("bootstrap") or {}
+                if bootstrap:
+                    addresses = ", ".join(bootstrap.get("lan_addresses", [])[:2]) or "local network"
+                    remote = bootstrap.get("public_host", "")
+                    route = f"LAN route: {addresses}:{bootstrap.get('port', 51414)}"
+                    if remote:
+                        route += f"  ·  Remote route: {remote}:{bootstrap.get('port', 51414)}"
+                    direct_clients = int(bootstrap.get("webseed_clients", 0) or 0)
+                    direct_bytes = int(bootstrap.get("webseed_bytes", 0) or 0)
+                    self.host_activity.connection_label.setText(
+                        f"{route}  ·  Direct transfer clients: {direct_clients}"
+                    )
+                    if direct_bytes:
+                        self.host_activity.totals_label.setText(
+                            self.host_activity.totals_label.text()
+                            + f"  ·  Direct sent {format_bytes(direct_bytes)}"
+                        )
+            else:
+                status = self._peer_manager.get_status(self._peer_gid)
+                peers = self._peer_manager.get_peers(self._peer_gid)
+                self.host_activity.update_activity(peers, status, host=False)
+            self._peer_status_warning_logged = False
+        except Exception as exc:
+            if not self._peer_status_warning_logged:
+                launcher_logger.warning("Could not read live peer status: %s", exc)
+                self._peer_status_warning_logged = True
+            self.host_activity.connection_label.setText(
+                "The sharing process is running, but its live peer status is temporarily unavailable."
+            )
+
+    def _stop_peer_sharing(self):
+        try:
+            if self._hosting_enabled:
+                from torrent_creator import SeederManager
+                SeederManager.stop_seeding()
+            elif self._peer_manager:
+                if self._peer_gid:
+                    self._peer_manager.remove(self._peer_gid)
+                self._peer_manager.stop()
+            launcher_logger.info("Peer sharing stopped by the user.")
+        except Exception:
+            launcher_logger.exception("Could not stop peer sharing cleanly")
+        self.peer_timer.stop()
+        self._hosting_enabled = False
+        self._peer_manager = None
+        self._peer_gid = None
+        self.host_activity.connection_label.setText(
+            "Sharing stopped. Playback can continue; this device is no longer serving the torrent."
+        )
+        self.host_activity.table.clearSpans()
+        self.host_activity.table.setRowCount(0)
+        self.btn_stop_sharing.hide()
 
     def _step_verify(self):
         if not os.path.exists(self.media_path):
@@ -347,16 +473,21 @@ class LaunchWidget(QWidget):
 
     def _retry(self):
         self.error_panel.clear()
-        self.start_launch(self.config, self.media_path)
+        self.start_launch(
+            self.config, self.media_path, is_host=self._hosting_enabled,
+            p2p_manager=self._peer_manager, p2p_gid=self._peer_gid,
+        )
         
     def _start_over(self):
         self.error_panel.clear()
+        self.peer_timer.stop()
         if self.log_file:
             self.log_file.close()
             self.log_file = None
         self.back_requested.emit()
         
     def _on_back(self):
+        self.peer_timer.stop()
         if self.log_file:
             self.log_file.close()
             self.log_file = None

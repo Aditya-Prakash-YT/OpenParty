@@ -84,15 +84,15 @@ def err_disk_full(required_gb: float, free_gb: float) -> str:
 def err_torrent_no_peers() -> str:
     return format_error(
         "Download stalled — no peers found.",
-        "Nobody is seeding this torrent right now, or the magnet link may be invalid.",
-        "Ask the host to confirm the magnet link is correct, or try again later."
+        "The host may be offline, the invite may be invalid, or a router/network may be blocking peer connections.",
+        "Ask the host to keep OpenParty open and check its upload status. Remote hosts may need TCP/UDP ports 51413-51420 forwarded to their PC."
     )
 
 def err_torrent_metadata_timeout() -> str:
     return format_error(
         "Could not connect to peers or retrieve movie details.",
-        "The host may not be seeding yet, firewall may be blocking connections, or no peers are online.",
-        "Make sure the host has OpenParty running, check your connection, and click Try Again."
+        "The host may not be seeding, no peers may be online, or a router/network may be blocking peer connections.",
+        "Make sure the host keeps OpenParty running. Remote hosts may need TCP/UDP ports 51413-51420 forwarded to their PC; then click Try Again."
     )
 
 def err_network_lost() -> str:
